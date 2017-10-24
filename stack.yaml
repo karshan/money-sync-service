@@ -1,0 +1,10 @@
+resolver: lts-9.9
+packages:
+- .
+- location: https://github.com/karshan/wai-middleware-auth/archive/38febdb92dd5367fd09585da84a0c40680a7dc17.zip
+  extra-dep: true
+- location: https://github.com/karshan/protolude/archive/5c83a823a4c4e176cd6524f44edef454da1718dd.zip
+  extra-dep: true
+extra-deps: [acid-state-0.14.3]
+flags: {}
+extra-package-dbs: []
