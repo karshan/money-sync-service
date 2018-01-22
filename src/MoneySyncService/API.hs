@@ -6,13 +6,13 @@ module MoneySyncService.API
     ( app
     ) where
 
-import           MoneySyncService.DB    (DBHandle, DBHandler, addUser, getUsers)
-import           MoneySyncService.Types (User)
+import           MoneySyncService.DB
+import           MoneySyncService.Types
 import           Protolude
 import           Servant
 
-type API = "users" :> Get '[JSON] [User]
-      :<|> "add"   :> ReqBody '[JSON] User :> Post '[JSON] ()
+type API = "txns" :> Get '[JSON] (Map TxnId Txn)
+      :<|> "add"   :> ReqBody '[JSON] Txn :> Post '[JSON] ()
 
 api :: Proxy API
 api = Proxy
@@ -21,7 +21,7 @@ server :: DBHandle -> Server API
 server acid = enter (runReaderTNat acid :: DBHandler :~> Handler) readerServerT
 
 readerServerT :: ServerT API DBHandler
-readerServerT = getUsers :<|> addUser
+readerServerT = getTxnDB :<|> (\_ -> return ())
 
 app :: DBHandle -> Application
 app acid = serve api (server acid)

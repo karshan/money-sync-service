@@ -17,13 +17,20 @@ library
                      , acid-state
                      , aeson
                      , clientsession
+                     , cereal
+                     , containers
+                     , cryptonite
+                     , either
                      , lens
+                     , memory
+                     , money-ihaskell
                      , natural-transformation
                      , protolude
                      , safecopy
                      , servant-server
+                     , text
+                     , time
                      , wai
-                     , wai-middleware-auth
                      , warp
   default-language:    Haskell2010
 

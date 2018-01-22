@@ -1,7 +1,7 @@
-resolver: lts-9.9
+resolver: lts-10.3
 packages:
 - .
-- location: https://github.com/karshan/wai-middleware-auth/archive/38febdb92dd5367fd09585da84a0c40680a7dc17.zip
+- location: https://github.com/karshan/money-ihaskell/archive/f7e5e10c04c3050457b916caed4fd5ee044ec0b1.zip
   extra-dep: true
 - location: https://github.com/karshan/protolude/archive/5c83a823a4c4e176cd6524f44edef454da1718dd.zip
   extra-dep: true
