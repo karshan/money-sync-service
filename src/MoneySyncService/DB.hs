@@ -208,6 +208,9 @@ updateInstEvt instId newCreds =
 addErrorLogEvt :: Text -> Update Database ()
 addErrorLogEvt newLog = modify (over errorLogDB (newLog:))
 
+clearErrorLogEvt :: Update Database ()
+clearErrorLogEvt = modify (over errorLogDB (const []))
+
 $(deriveSafeCopy 0 'base ''Txn)
 $(deriveSafeCopy 0 'base ''Balance)
 $(deriveSafeCopy 0 'base ''AccountType)
@@ -234,6 +237,7 @@ $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'removeInstEvt
                         , 'updateInstEvt
                         , 'addErrorLogEvt
+                        , 'clearErrorLogEvt
                         ])
 
 query' a = liftIO . query a
@@ -273,7 +277,10 @@ updateInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> Creds -> m
 updateInst instId creds = (`update'` UpdateInstEvt instId creds) =<< ask
 
 addErrorLog :: (MonadReader DBHandle m, MonadIO m) => Text -> m ()
-addErrorLog log = (`update'` AddErrorLogEvt log) =<< ask
+addErrorLog errorLog = (`update'` AddErrorLogEvt errorLog) =<< ask
+
+clearErrorLog :: (MonadReader DBHandle m, MonadIO m) => m ()
+clearErrorLog = (`update'` ClearErrorLogEvt) =<< ask
 
 openDB :: FilePath -> IO DBHandle
 openDB fp = openLocalStateFrom fp emptyDB
