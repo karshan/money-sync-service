@@ -31,15 +31,16 @@ import           Servant                       (Handler)
 -- transactions that refer to a non-existent accountId ?
 data Database =
     Database {
-        _txnDB     :: Map TxnId Txn
-      , _instDB    :: Map InstitutionId Institution
-      , _accountDB :: Map AccountId Account
-      , _fcstTxnDB :: Map TxnId FcstTxn
+        _txnDB      :: Map TxnId Txn
+      , _instDB     :: Map InstitutionId Institution
+      , _accountDB  :: Map AccountId Account
+      , _fcstTxnDB  :: Map TxnId FcstTxn
+      , _errorLogDB :: [Text]
     } deriving (Eq)
 makeLenses ''Database
 
 emptyDB :: Database
-emptyDB = Database Map.empty Map.empty Map.empty Map.empty
+emptyDB = Database Map.empty Map.empty Map.empty Map.empty []
 
 getDBEvt :: Query Database GetDBResponse
 getDBEvt =
@@ -62,6 +63,9 @@ getFcstTxnDBEvt = view fcstTxnDB <$> ask
 
 getInstDBEvt :: Query Database (Map InstitutionId Institution)
 getInstDBEvt = view instDB <$> ask
+
+getErrorLogEvt :: Query Database [Text]
+getErrorLogEvt = view errorLogDB <$> ask
 
 -- its impossible for undefined to be evaluated, the filter is on an infinite list
 -- we could get rid of the undefined by rewriting this as explicit infinite recursion
@@ -201,6 +205,9 @@ updateInstEvt :: InstitutionId -> Creds -> Update Database ()
 updateInstEvt instId newCreds =
     modify (over instDB (Map.adjust (L.creds .~ newCreds) instId))
 
+addErrorLogEvt :: Text -> Update Database ()
+addErrorLogEvt newLog = modify (over errorLogDB (newLog:))
+
 $(deriveSafeCopy 0 'base ''Txn)
 $(deriveSafeCopy 0 'base ''Balance)
 $(deriveSafeCopy 0 'base ''AccountType)
@@ -221,10 +228,12 @@ $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'getFcstTxnDBEvt
                         , 'getInstDBEvt
                         , 'getDBEvt
+                        , 'getErrorLogEvt
                         , 'mergeEvt
                         , 'addInstEvt
                         , 'removeInstEvt
                         , 'updateInstEvt
+                        , 'addErrorLogEvt
                         ])
 
 query' a = liftIO . query a
@@ -248,6 +257,9 @@ getInstDB = (`query'` GetInstDBEvt) =<< ask
 getDB :: (MonadReader DBHandle m, MonadIO m) => m GetDBResponse
 getDB = (`query'` GetDBEvt) =<< ask
 
+getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
+getErrorLog = (`query'` GetErrorLogEvt) =<< ask
+
 merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m ()
 merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
 
@@ -258,7 +270,10 @@ removeInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> m ()
 removeInst instId = (`update'` RemoveInstEvt instId) =<< ask
 
 updateInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> Creds -> m ()
-updateInst instId creds' = (`update'` UpdateInstEvt instId creds') =<< ask
+updateInst instId creds = (`update'` UpdateInstEvt instId creds) =<< ask
+
+addErrorLog :: (MonadReader DBHandle m, MonadIO m) => Text -> m ()
+addErrorLog log = (`update'` AddErrorLogEvt log) =<< ask
 
 openDB :: FilePath -> IO DBHandle
 openDB fp = openLocalStateFrom fp emptyDB

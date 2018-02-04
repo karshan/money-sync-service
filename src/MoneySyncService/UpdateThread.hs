@@ -28,7 +28,7 @@ updateThread = do
                 ChaseCreds chaseReq -> do
                     eResult <- Chase.scrape chaseReq
                     either
-                        print
+                        addErrorLog
                         (merge (i ^. L.id))
                         eResult)
         is
