@@ -10,22 +10,21 @@ module MoneySyncService.DB where
 
 import           Control.Lens                  (over, view, (.~), (^.))
 import           Control.Lens.TH               (makeLenses)
-import           Crypto.Hash                   (SHA256 (SHA256), hashWith)
 import           Data.Acid                     (AcidState, Query, Update,
                                                 makeAcidic, openLocalStateFrom,
                                                 query, update)
-import           Data.ByteArray.Encoding       (Base (Base64), convertToBase)
 import qualified Data.Map.Strict               as Map
 import           Data.SafeCopy                 (base, deriveSafeCopy)
 import           Data.Sequence                 (Seq, (|>))
 import qualified Data.Sequence                 as S
 import qualified Data.Set                      as Set
-import qualified Data.Text                     as T (take)
 import qualified Lenses                        as L
 import           MoneySyncService.Scrapers.API
 import           MoneySyncService.Types
 import           Protolude
 import           Servant                       (Handler)
+import           System.Random
+import           Util                          (randomText)
 
 -- TODO is it possible to ensure with types that the DB can never contain
 -- transactions that refer to a non-existent accountId ?
@@ -36,11 +35,12 @@ data Database =
       , _accountDB  :: Map AccountId Account
       , _fcstTxnDB  :: Map TxnId FcstTxn
       , _errorLogDB :: [Text]
-    } deriving (Eq)
+      , _rndSeed    :: StdGen
+    }
 makeLenses ''Database
 
 emptyDB :: Database
-emptyDB = Database Map.empty Map.empty Map.empty Map.empty []
+emptyDB = Database Map.empty Map.empty Map.empty Map.empty [] (mkStdGen 0)
 
 getDBEvt :: Query Database GetDBResponse
 getDBEvt =
@@ -67,15 +67,17 @@ getInstDBEvt = view instDB <$> ask
 getErrorLogEvt :: Query Database [Text]
 getErrorLogEvt = view errorLogDB <$> ask
 
--- its impossible for undefined to be evaluated, the filter is on an infinite list
--- we could get rid of the undefined by rewriting this as explicit infinite recursion
--- TODO make this use Random instead
-generateId :: Set Text -> Text
-generateId existingIds =
-    fromMaybe undefined $ head $ filter (\pId -> not (pId `Set.member` existingIds)) (map (T.take 10 . toS) possibleIds)
+generateId :: Set Text -> Update Database Text
+generateId existingIds = do
+    _g <- view rndSeed <$> get
+    go _g
         where
-            possibleIds :: [ByteString]
-            possibleIds = map (convertToBase Base64 . hashWith SHA256 . (show :: Int -> ByteString)) [0..]
+            go g = let (newId, nextG) = randomText g 10
+                   in if not (newId `Set.member` existingIds) then do
+                          modify (over rndSeed (const nextG))
+                          return newId
+                      else
+                          go nextG
 
 -- | Merges a list of new transactions into the db, assigning each txn a unique
 -- id.
@@ -130,7 +132,7 @@ removeDupeTxns accId curTxns newTxns =
 putTxn :: AccountId -> TxnRaw -> Update Database TxnId
 putTxn accId txn = do
     existingTxnIds <- Map.keysSet . view txnDB <$> get
-    let newId = generateId existingTxnIds
+    newId <- generateId existingTxnIds
     modify (over txnDB (Map.insert newId (mkTxn accId newId txn)))
     return newId
 
@@ -143,7 +145,7 @@ putAccount instId mergeAcc = do
             acc ^. L._3pLink  == mergeAcc ^. L._3pLink) . view accountDB <$> get
     existingAccIds <- Map.keysSet . view accountDB <$> get
     curTxns <- view txnDB <$> get
-    let newId = generateId existingAccIds
+    newId <- generateId existingAccIds
     let accId = fromMaybe newId (view L.id <$> mExistingAcc)
     let existingBals = fromMaybe [] (view L.balances <$> mExistingAcc)
     let newTxns = removeDupeTxns accId curTxns (mergeAcc ^. L.txns)
@@ -179,17 +181,19 @@ mergeEvt gInstId mergeAccs =
     mapM_ (putAccount gInstId) mergeAccs
 
 addInstEvt :: CreateInstitution -> Update Database ()
-addInstEvt a =
+addInstEvt a = do
+    existingIds <- Map.keysSet . Map.mapKeys toS . view instDB <$> get
+    newId <- InstitutionId <$> generateId existingIds
     modify
         (over instDB
             (\cur ->
-                let newId = InstitutionId $ generateId (Map.keysSet $ Map.mapKeys toS cur)
-                in Map.insert newId
-                            (emptyInstitution &
-                                L.id .~ newId &
-                                L.name .~ a ^. L.name &
-                                L.creds .~ a ^. L.creds)
-                            cur))
+                Map.insert
+                    newId
+                    (emptyInstitution &
+                        L.id .~ newId &
+                        L.name .~ a ^. L.name &
+                        L.creds .~ a ^. L.creds)
+                    cur))
 
 -- delete all txns and accounts in the DB associated with the given institution
 removeInstEvt :: InstitutionId -> Update Database ()
@@ -226,6 +230,7 @@ $(deriveSafeCopy 0 'base ''Database)
 $(deriveSafeCopy 0 'base ''InstitutionResponse)
 $(deriveSafeCopy 0 'base ''GetDBResponse)
 $(deriveSafeCopy 0 'base ''CreateInstitution)
+$(deriveSafeCopy 0 'base ''StdGen)
 $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'getAccountDBEvt
                         , 'getFcstTxnDBEvt

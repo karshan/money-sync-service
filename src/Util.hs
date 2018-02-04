@@ -1,10 +1,19 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Util where
 
-import Data.Char (toLower)
-
-lowerFirst :: String -> String
-lowerFirst (x:xs) = toLower x:xs
-lowerFirst [] = []
+import System.Random
+import Protolude
+import qualified Data.Text as T
+import Data.List ((!!))
 
 dblUsd :: Double -> Int
 dblUsd x = floor (x * 100)
+
+randomText :: RandomGen g => g -> Int -> (Text, g)
+randomText _g = go (T.empty, _g)
+    where
+        charset = ['0'..'9'] ++ ['A'..'Z'] ++ ['a'..'z'] ++ ['-', '_']
+        go acc 0 = acc
+        go (acc, g) n =
+            let (c, nextG) = randomR (0, length charset) g
+            in go ((charset !! c) `T.cons` acc, nextG) (n - 1)

@@ -27,7 +27,6 @@ library
                      , clientsession
                      , cereal
                      , containers
-                     , cryptonite
                      , either
                      , http-client
                      , http-client-tls
@@ -35,6 +34,7 @@ library
                      , memory
                      , natural-transformation
                      , protolude
+                     , random
                      , safecopy
                      , servant
                      , servant-client

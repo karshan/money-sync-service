@@ -10,7 +10,6 @@
 {-# LANGUAGE TypeOperators          #-}
 module MoneySyncService.Scrapers.API where
 
-import           Control.Lens.TH         (makeLenses)
 import           Data.Aeson              (Value)
 import           Data.Aeson.TH           (Options (..), defaultOptions,
                                           deriveJSON)
@@ -24,23 +23,20 @@ import           Servant.API             ((:<|>) (..), (:>), JSON, Post,
 import           Servant.Client          (BaseUrl (..), ClientEnv (..), ClientM,
                                           Scheme (Http), ServantError, client,
                                           runClientM)
-import           Util                    (lowerFirst)
 
 -- TODO duplicaterecordfields + makeFieldsNoPrefix
 data BofaRequest =
     BofaRequest {
-        _bofaUsername :: Text
+        _username :: Text
     } deriving (Eq, Show)
-makeLenses ''BofaRequest
-$(deriveJSON defaultOptions{fieldLabelModifier = lowerFirst . drop 5} ''BofaRequest)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaRequest)
 
 data BofaResponse =
     BofaResponse {
-        _bofaCsv :: Maybe Text
-      , _bofaOk  :: Bool
+        _csv :: Maybe Text
+      , _ok  :: Bool
     } deriving (Eq, Show)
-makeLenses ''BofaResponse
-$(deriveJSON defaultOptions{fieldLabelModifier = lowerFirst . drop 5} ''BofaResponse)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaResponse)
 
 data ChaseCreds =
     ChaseCreds {
