@@ -1,16 +1,12 @@
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeFamilies        #-}
-module MoneySyncService.DB
-    ( DBHandle
-    , DBHandler
-    , getTxnDB
-    , getAccountDB
-    , getFcstTxnDB
-    , openDB
-    ) where
+{-# OPTIONS_GHC -fno-warn-orphans  #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
+module MoneySyncService.DB where
 
 import           Control.Lens                  (over, view, (.~), (^.))
 import           Control.Lens.TH               (makeLenses)
@@ -20,30 +16,40 @@ import           Data.Acid                     (AcidState, Query, Update,
                                                 query, update)
 import           Data.ByteArray.Encoding       (Base (Base64), convertToBase)
 import qualified Data.Map.Strict               as Map
-import           Data.SafeCopy                 (base, deriveSafeCopy, safePut)
+import           Data.SafeCopy                 (base, deriveSafeCopy)
 import           Data.Sequence                 (Seq, (|>))
 import qualified Data.Sequence                 as S
-import           Data.Serialize.Put            (runPut)
 import qualified Data.Set                      as Set
 import qualified Data.Text                     as T (take)
-import           MoneySyncService.PseudoLenses (HasAccountIds (..))
+import qualified Lenses                        as L
+import           MoneySyncService.Scrapers.API
 import           MoneySyncService.Types
 import           Protolude
 import           Servant                       (Handler)
 
+-- TODO is it possible to ensure with types that the DB can never contain
+-- transactions that refer to a non-existent accountId ?
 data Database =
     Database {
         _txnDB     :: Map TxnId Txn
+      , _instDB    :: Map InstitutionId Institution
       , _accountDB :: Map AccountId Account
       , _fcstTxnDB :: Map TxnId FcstTxn
-    } deriving (Eq, Show)
+    } deriving (Eq)
 makeLenses ''Database
 
-instance HasAccountIds Database where
-    accountIds = Set.fromList . Map.keys . view accountDB
-
 emptyDB :: Database
-emptyDB = Database Map.empty Map.empty Map.empty
+emptyDB = Database Map.empty Map.empty Map.empty Map.empty
+
+getDBEvt :: Query Database GetDBResponse
+getDBEvt =
+    (\db -> emptyGetDBResponse &
+        L.institutions .~ map (\a -> emptyInstitutionResponse &
+                                L.id .~ a ^. L.id &
+                                L.name .~ a ^. L.name)
+                            (db ^. instDB) &
+        L.accounts .~ db ^. accountDB &
+        L.txns .~ db ^. txnDB) <$> ask
 
 getTxnDBEvt :: Query Database (Map TxnId Txn)
 getTxnDBEvt = view txnDB <$> ask
@@ -54,16 +60,23 @@ getAccountDBEvt = view accountDB <$> ask
 getFcstTxnDBEvt :: Query Database (Map TxnId FcstTxn)
 getFcstTxnDBEvt = view fcstTxnDB <$> ask
 
-$(deriveSafeCopy 0 'base ''Txn)
-$(deriveSafeCopy 0 'base ''Balance)
-$(deriveSafeCopy 0 'base ''AccountType)
-$(deriveSafeCopy 0 'base ''Account)
-$(deriveSafeCopy 0 'base ''FcstTxn)
-$(deriveSafeCopy 0 'base ''Database)
-$(makeAcidic ''Database [ 'getTxnDBEvt, 'getAccountDBEvt, 'getFcstTxnDBEvt ])
+getInstDBEvt :: Query Database (Map InstitutionId Institution)
+getInstDBEvt = view instDB <$> ask
 
--- | Merges a set of new transactions into the db, assigning each txn a unique
+-- its impossible for undefined to be evaluated, the filter is on an infinite list
+-- we could get rid of the undefined by rewriting this as explicit infinite recursion
+-- TODO make this use Random instead
+generateId :: Set Text -> Text
+generateId existingIds =
+    fromMaybe undefined $ head $ filter (\pId -> not (pId `Set.member` existingIds)) (map (T.take 10 . toS) possibleIds)
+        where
+            possibleIds :: [ByteString]
+            possibleIds = map (convertToBase Base64 . hashWith SHA256 . (show :: Int -> ByteString)) [0..]
+
+-- | Merges a list of new transactions into the db, assigning each txn a unique
 -- id.
+--
+-- This is an acid avent because it must be atomic. (read txns and update)
 --
 -- In theory it would be possible to use the same transaction id's given by
 -- data providers (chase/bofa/plaid) but we don't.
@@ -73,7 +86,6 @@ $(makeAcidic ''Database [ 'getTxnDBEvt, 'getAccountDBEvt, 'getFcstTxnDBEvt ])
 -- existing transactions:
 --   txnName
 --   txnDate
---   txnPostDate
 --   txnAmount
 --   txnAccount
 -- We need to be careful when checking for duplicates, we cannot just check each
@@ -87,52 +99,133 @@ $(makeAcidic ''Database [ 'getTxnDBEvt, 'getAccountDBEvt, 'getFcstTxnDBEvt ])
 -- It is an error if a new txn refers to an accountId not in the db
 --
 -- TODO newTxns should have a type that indicates they don't have a txnId
-mergeNewTxns :: Seq Txn     -- ^ set of new transactions.
-             -> Update Database (Either Text ())
-mergeNewTxns newTxns = do
-    db <- get
-    let foldResult =
-            S.foldlWithIndex
-                (\(eOutTxns, existingPool) i txn ->
-                    case eOutTxns of
-                        Right outTxns ->
-                            if not $ (txn ^. txnAccount) `Set.member` accountIds db then
-                                (Left ("txn refers to unknown accountId " <> show txn), existingPool)
-                            else
-                                maybe
-                                    (do
-                                        let newId = generateTxnId txn outTxns
-                                        (Right $ Map.insert newId (txn & txnId .~ newId) outTxns, existingPool))
-                                    (\existingDupeIndex ->
-                                        (Right outTxns, S.deleteAt existingDupeIndex existingPool))
-                                    (S.findIndexL
-                                        (\existingT ->
-                                            txn ^. txnName == existingT ^. txnName &&
-                                            txn ^. txnDate == existingT ^. txnDate &&
-                                            txn ^. txnPostDate == existingT ^. txnPostDate &&
-                                            txn ^. txnAmount == existingT ^. txnAmount &&
-                                            txn ^. txnAccount == existingT ^. txnAccount)
-                                        existingPool)
-                        Left err -> (Left err, existingPool))
-                (Right $ db ^. txnDB, S.fromList $ Map.elems $ db ^. txnDB) -- TODO we can use a Map for existingPool also
-                newTxns
-    either
-        (return . Left)
-        (\newTxnMap -> fmap Right $ put (db & txnDB .~ newTxnMap))
-        (fst foldResult)
+-- TODO fix this docstring after code refactor
+-- TODO rewrite using StateT existingPool (Either Text) ?
+-- This function assumes newTxns doesn't contain any txns refering to invalid accountIds
+-- if not $ (txn ^. txnAccount) `Set.member` accountIds db then
+-- (Left ("txn refers to unknown accountId " <> show txn), existingPool)
+removeDupeTxns :: AccountId -> Map TxnId Txn -> Seq TxnRaw -> Seq TxnRaw
+removeDupeTxns accId curTxns newTxns =
+    fst $ foldl
+        (\(outTxns, existingPool) txn ->
+            maybe
+                (outTxns |> txn, existingPool)
+                (\existingDupe ->
+                    (outTxns, Map.delete (existingDupe ^. L.id) existingPool))
+                (head $ Map.filter
+                    (\existingT ->
+                        txn ^. L.name == existingT ^. L.name &&
+                        txn ^. L.date == existingT ^. L.date &&
+                        txn ^. L.amount == existingT ^. L.amount &&
+                        accId == existingT ^. L.accountId)
+                    existingPool))
+        (S.empty, curTxns) -- TODO we can use a Map for existingPool also
+        newTxns
 
--- TODO: rename update accounts, add docstring
-mergeNewAccounts :: Map AccountId Account -> Update Database ()
-mergeNewAccounts accountMap = modify (over accountDB (Map.union accountMap))
+-- TODO error if refer to non-existent account id ?
+putTxn :: AccountId -> TxnRaw -> Update Database TxnId
+putTxn accId txn = do
+    existingTxnIds <- Map.keysSet . view txnDB <$> get
+    let newId = generateId existingTxnIds
+    modify (over txnDB (Map.insert newId (mkTxn accId newId txn)))
+    return newId
 
--- its impossible for undefined to be evaluated, the filter is on an infinite list
--- we could get rid of the undefined by rewriting this as explicit infinite recursion
-generateTxnId :: Txn -> Map TxnId Txn -> TxnId
-generateTxnId txn existingTxns =
-    fromMaybe undefined $ head $ filter (\pId -> not (pId `Set.member` existingIds)) (map (T.take 8 . toS) possibleIds)
-        where
-            possibleIds = map (\(i, d) -> (convertToBase Base64 (hashWith SHA256 (d <> show i))) :: ByteString) $ zip [0..] $ repeat (runPut (safePut txn))
-            existingIds = Map.keysSet existingTxns
+-- TODO error if non-existent institution id ?
+putAccount :: InstitutionId -> MergeAccount -> Update Database AccountId
+putAccount instId mergeAcc = do
+    mExistingAcc <- head . Map.elems . Map.filter
+        (\acc ->
+            acc ^. L.institutionId == instId &&
+            acc ^. L._3pLink  == mergeAcc ^. L._3pLink) . view accountDB <$> get
+    existingAccIds <- Map.keysSet . view accountDB <$> get
+    curTxns <- view txnDB <$> get
+    let newId = generateId existingAccIds
+    let accId = fromMaybe newId (view L.id <$> mExistingAcc)
+    let existingBals = fromMaybe [] (view L.balances <$> mExistingAcc)
+    let newTxns = removeDupeTxns accId curTxns (mergeAcc ^. L.txns)
+    newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
+    let newBal = emptyBalance & L.amount .~ mergeAcc ^. L.balance & L.txnIds .~ newTxnIds
+    modify (over accountDB (Map.insert newId (mkAccount instId accId (newBal:existingBals) mergeAcc)))
+    return accId
+
+mkAccount :: InstitutionId -> AccountId -> [Balance] -> MergeAccount -> Account
+mkAccount instId accId bals mAcc =
+    emptyAccount &
+        L.id .~ accId &
+        L.balances .~ bals &
+        L._type .~ mAcc ^. L._type &
+        L.number .~ mAcc ^. L.number &
+        L.name .~ mAcc ^. L.name &
+        L.institutionId .~ instId &
+        L._3pLink .~ mAcc ^. L._3pLink
+
+mkTxn :: AccountId -> TxnId -> TxnRaw -> Txn
+mkTxn accId tId txn =
+    emptyTxn &
+        L.id .~ tId &
+        L.name .~ txn ^. L.name &
+        L.date .~ txn ^. L.date &
+        L.amount .~ txn ^. L.amount &
+        L.accountId .~ accId &
+        L.meta .~ txn ^. L.meta &
+        L.tags .~ txn ^. L.tags
+
+mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database ()
+mergeEvt gInstId mergeAccs =
+    mapM_ (putAccount gInstId) mergeAccs
+
+addInstEvt :: CreateInstitution -> Update Database ()
+addInstEvt a =
+    modify
+        (over instDB
+            (\cur ->
+                let newId = InstitutionId $ generateId (Map.keysSet $ Map.mapKeys toS cur)
+                in Map.insert newId
+                            (emptyInstitution &
+                                L.id .~ newId &
+                                L.name .~ a ^. L.name &
+                                L.creds .~ a ^. L.creds)
+                            cur))
+
+-- delete all txns and accounts in the DB associated with the given institution
+removeInstEvt :: InstitutionId -> Update Database ()
+removeInstEvt instId = do
+    -- accIds associated with given institution id
+    accIds <- Map.keysSet . Map.filter ((== instId) . view L.institutionId) . view accountDB <$> get
+    modify (over accountDB (Map.filterWithKey (\k _ -> k `Set.notMember` accIds)))
+    modify (over txnDB (Map.filter (flip Set.notMember accIds . view L.accountId)))
+    modify (over instDB (Map.delete instId))
+
+-- for now only institution creds can be updated
+updateInstEvt :: InstitutionId -> Creds -> Update Database ()
+updateInstEvt instId newCreds =
+    modify (over instDB (Map.adjust (L.creds .~ newCreds) instId))
+
+$(deriveSafeCopy 0 'base ''Txn)
+$(deriveSafeCopy 0 'base ''Balance)
+$(deriveSafeCopy 0 'base ''AccountType)
+$(deriveSafeCopy 0 'base ''ChaseCreds)
+$(deriveSafeCopy 0 'base ''Creds)
+$(deriveSafeCopy 0 'base ''InstitutionId)
+$(deriveSafeCopy 0 'base ''Institution)
+$(deriveSafeCopy 0 'base ''Account)
+$(deriveSafeCopy 0 'base ''TxnRaw)
+$(deriveSafeCopy 0 'base ''MergeAccount)
+$(deriveSafeCopy 0 'base ''FcstTxn)
+$(deriveSafeCopy 0 'base ''Database)
+$(deriveSafeCopy 0 'base ''InstitutionResponse)
+$(deriveSafeCopy 0 'base ''GetDBResponse)
+$(deriveSafeCopy 0 'base ''CreateInstitution)
+$(makeAcidic ''Database [ 'getTxnDBEvt
+                        , 'getAccountDBEvt
+                        , 'getFcstTxnDBEvt
+                        , 'getInstDBEvt
+                        , 'getDBEvt
+                        , 'mergeEvt
+                        , 'addInstEvt
+                        , 'removeInstEvt
+                        , 'updateInstEvt
+                        ])
 
 query' a = liftIO . query a
 update' a = liftIO . update a
@@ -140,17 +233,32 @@ update' a = liftIO . update a
 type DBHandle = AcidState Database
 type DBHandler = ReaderT DBHandle Handler
 
-getTxnDB :: DBHandler (Map TxnId Txn)
+getTxnDB :: (MonadReader DBHandle m, MonadIO m) => m (Map TxnId Txn)
 getTxnDB = (`query'` GetTxnDBEvt) =<< ask
 
-getAccountDB :: DBHandler (Map AccountId Account)
+getAccountDB :: (MonadReader DBHandle m, MonadIO m) => m (Map AccountId Account)
 getAccountDB = (`query'` GetAccountDBEvt) =<< ask
 
-getFcstTxnDB :: DBHandler (Map TxnId FcstTxn)
+getFcstTxnDB :: (MonadReader DBHandle m, MonadIO m) => m (Map TxnId FcstTxn)
 getFcstTxnDB = (`query'` GetFcstTxnDBEvt) =<< ask
 
---addUser :: User -> DBHandler ()
---addUser user = (`update'` AddUserEvt user) =<< ask
+getInstDB :: (MonadReader DBHandle m, MonadIO m) => m (Map InstitutionId Institution)
+getInstDB = (`query'` GetInstDBEvt) =<< ask
+
+getDB :: (MonadReader DBHandle m, MonadIO m) => m GetDBResponse
+getDB = (`query'` GetDBEvt) =<< ask
+
+merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m ()
+merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
+
+addInst :: (MonadReader DBHandle m, MonadIO m) => CreateInstitution -> m ()
+addInst institution = (`update'` AddInstEvt institution) =<< ask
+
+removeInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> m ()
+removeInst instId = (`update'` RemoveInstEvt instId) =<< ask
+
+updateInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> Creds -> m ()
+updateInst instId creds' = (`update'` UpdateInstEvt instId creds') =<< ask
 
 openDB :: FilePath -> IO DBHandle
 openDB fp = openLocalStateFrom fp emptyDB

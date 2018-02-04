@@ -11,8 +11,8 @@ import           MoneySyncService.Types
 import           Protolude
 import           Servant
 
-type API = "txns" :> Get '[JSON] (Map TxnId Txn)
-      :<|> "add"   :> ReqBody '[JSON] Txn :> Post '[JSON] ()
+type API = "db" :> "get" :> Get '[JSON] GetDBResponse
+      :<|> "institution" :> "create" :> ReqBody '[JSON] CreateInstitution :> Post '[JSON] ()
 
 api :: Proxy API
 api = Proxy
@@ -21,7 +21,7 @@ server :: DBHandle -> Server API
 server acid = enter (runReaderTNat acid :: DBHandler :~> Handler) readerServerT
 
 readerServerT :: ServerT API DBHandler
-readerServerT = getTxnDB :<|> (\_ -> return ())
+readerServerT = getDB :<|> addInst
 
 app :: DBHandle -> Application
 app acid = serve api (server acid)
