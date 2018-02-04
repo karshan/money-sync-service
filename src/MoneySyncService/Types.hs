@@ -18,7 +18,26 @@ import qualified Data.Set                      as Set
 import           Data.Time.Calendar            (Day (..))
 import           GHC.Generics                  (Generic)
 import           MoneySyncService.Scrapers.API
+import           Network.Wai.Handler.Warp      (HostPreference)
 import           Protolude
+
+data NotificationConfig =
+    NotificationConfig {
+        gsuiteKeyFile :: FilePath
+      , svcAccUser    :: Text
+      , toEmail       :: Text
+    } deriving (Eq, Show)
+
+data AppConfig =
+    AppConfig {
+        dbDir              :: FilePath
+      , host               :: HostPreference
+      , port               :: Int
+      , notificationConfig :: NotificationConfig
+    } deriving (Eq, Show)
+
+defaultAppConfig :: AppConfig
+defaultAppConfig = AppConfig "db" "127.0.0.1" 8080 (NotificationConfig "svc-acc-key.json" "" "")
 
 data InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
 

@@ -3,6 +3,13 @@ packages:
 - .
 - location: https://github.com/karshan/protolude/archive/5c83a823a4c4e176cd6524f44edef454da1718dd.zip
   extra-dep: true
+- location: https://github.com/brendanhay/gogol/archive/896ef3472ce09116f13d0cda3b8134b28e833a19.zip
+  extra-dep: true
+  subdirs:
+    - gogol
+    - gogol-gmail
+- location: https://github.com/karshan/gsuite-admin-sendmail/archive/fc195669a3153fae575872d40038ad45f13070de.zip
+  extra-dep: true
 extra-deps:
 - acid-state-0.14.3
 flags: {}
