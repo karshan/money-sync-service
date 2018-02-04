@@ -2,9 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeOperators     #-}
-module MoneySyncService.API
-    ( app
-    ) where
+module MoneySyncService.API where
 
 import           MoneySyncService.DB
 import           MoneySyncService.Types

@@ -37,5 +37,5 @@ updateThread c@NotificationConfig{..} = do
                         (merge (i ^. L.id))
                         eResult)
         is
-    minuteDelay 60
+    minuteDelay (8 * 3600)
     updateThread c
