@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE DuplicateRecordFields  #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -104,4 +105,4 @@ run rpc = liftIO $ do
     mgr <- newManager (tlsManagerSettings { managerResponseTimeout = responseTimeoutMicro (120 * 10^6) })
     runClientM rpc
         (ClientEnv mgr
-            (BaseUrl Http "localhost" 8000 ""))
+            (BaseUrl Http "localhost" 8002 ""))

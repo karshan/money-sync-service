@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE DuplicateRecordFields  #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -37,7 +38,7 @@ data AppConfig =
     } deriving (Eq, Show)
 
 defaultAppConfig :: AppConfig
-defaultAppConfig = AppConfig "db" "127.0.0.1" 8080 (NotificationConfig "svc-acc-key.json" "" "")
+defaultAppConfig = AppConfig "db" "127.0.0.1" 8001 (NotificationConfig "svc-acc-key.json" "" "")
 
 data InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
 

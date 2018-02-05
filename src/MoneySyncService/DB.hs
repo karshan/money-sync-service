@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK prune #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}

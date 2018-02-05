@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Util where
 
@@ -15,5 +16,5 @@ randomText _g = go (T.empty, _g)
         charset = ['0'..'9'] ++ ['A'..'Z'] ++ ['a'..'z'] ++ ['-', '_']
         go acc 0 = acc
         go (acc, g) n =
-            let (c, nextG) = randomR (0, length charset) g
-            in go ((charset !! c) `T.cons` acc, nextG) (n - 1)
+            let (c, nextG) = random g
+            in go ((charset !! (c `mod` length charset)) `T.cons` acc, nextG) (n - 1)
