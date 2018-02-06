@@ -110,7 +110,7 @@ $(deriveJSON defaultOptions ''Creds)
 data Account =
     Account {
         _id            :: AccountId
-      , _balances      :: [Balance]
+      , _balances      :: [Balance] -- TODO NonEmptyList Balance
       , __type         :: AccountType
       , _number        :: Text
       , _name          :: Text

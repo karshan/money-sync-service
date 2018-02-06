@@ -138,6 +138,7 @@ putTxn accId txn = do
     return newId
 
 -- TODO error if non-existent institution id ?
+-- TODO verify new balance against old balance here and report failures ?
 putAccount :: InstitutionId -> MergeAccount -> Update Database AccountId
 putAccount instId mergeAcc = do
     mExistingAcc <- head . Map.elems . Map.filter
@@ -151,7 +152,8 @@ putAccount instId mergeAcc = do
     let existingBals = fromMaybe [] (view L.balances <$> mExistingAcc)
     let newTxns = removeDupeTxns accId curTxns (mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
-    let newBal = emptyBalance & L.amount .~ mergeAcc ^. L.balance & L.txnIds .~ newTxnIds
+    mergedTxnIds <- Map.keysSet . view txnDB <$> get
+    let newBal = emptyBalance & L.amount .~ mergeAcc ^. L.balance & L.txnIds .~ mergedTxnIds
     modify (over accountDB (Map.insert newId (mkAccount instId accId (newBal:existingBals) mergeAcc)))
     return accId
 
