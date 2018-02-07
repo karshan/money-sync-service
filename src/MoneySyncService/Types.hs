@@ -100,8 +100,8 @@ type Password = Text
 type SecretAnswers = [(Text, Text)]
 
 data Creds =
-    BofaCreds Username Password SecretAnswers
-  | ChaseCreds ChaseCreds
+    BofaCredsT BofaCreds
+  | ChaseCredsT ChaseCreds
         deriving (Eq)
 $(deriveJSON defaultOptions ''Creds)
 
@@ -133,7 +133,7 @@ data Institution =
     } deriving (Eq)
 
 emptyInstitution :: Institution
-emptyInstitution = Institution (InstitutionId "") "" (BofaCreds "" "" [])
+emptyInstitution = Institution (InstitutionId "") "" (BofaCredsT $ BofaCreds "" "" Map.empty)
 
 -- Txn without Ids
 -- another way to structure these types could be to have Txn contain a TxnRaw

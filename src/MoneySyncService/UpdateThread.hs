@@ -13,6 +13,7 @@ import qualified Data.Map                        as Map
 import           Google.SendMail                 (sendMail')
 import qualified Lenses                          as L
 import           MoneySyncService.DB
+import qualified MoneySyncService.Scrapers.Bofa  as Bofa
 import qualified MoneySyncService.Scrapers.Chase as Chase
 import           MoneySyncService.Types
 import           Protolude
@@ -27,13 +28,21 @@ updateThread c@NotificationConfig{..} = do
     mapM_
         (\i -> do
             case i ^. L.creds of
-                BofaCreds _ _ _ -> undefined
-                ChaseCreds chaseReq -> do
+                BofaCredsT bofaReq -> do
+                    eResult <- Bofa.scrape bofaReq
+                    either
+                        (\e -> do
+                            liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                "money-sync-service bofa-scraper error" e
+                            addErrorLog e)
+                        (merge (i ^. L.id))
+                        eResult
+                ChaseCredsT chaseReq -> do
                     eResult <- Chase.scrape chaseReq
                     either
                         (\e -> do
                             liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                "money-sync-service scraper error" e
+                                "money-sync-service chas-scraper error" e
                             addErrorLog e)
                         (merge (i ^. L.id))
                         eResult)

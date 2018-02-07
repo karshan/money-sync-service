@@ -26,34 +26,33 @@ parseDate dateS =
 goTxns :: [ChaseTransaction] -> Either Text (Seq TxnRaw)
 goTxns cts =
     foldl
-        (\eOut ct ->
-            eOut >>= (\out -> do
-                dt <- parseDate (ct ^. L.transactionDate)
-                return $ out S.|> (emptyTxnRaw &
-                    L.name .~ ct ^. L.description &
-                    L.date .~ dt &
-                    L.amount .~ dblUsd (ct ^. L.amount))))
+        (\eOut ct -> do
+            out <- eOut
+            dt <- parseDate (ct ^. L.transactionDate)
+            return $ out S.|> (emptyTxnRaw &
+                L.name .~ ct ^. L.description &
+                L.date .~ dt &
+                L.amount .~ dblUsd (ct ^. L.amount)))
         (Right S.empty)
         (S.fromList cts)
 
 goAccs :: [ChaseAccountTile] -> Either Text [MergeAccount]
-goAccs accTiles =
+goAccs =
     foldl
-        (\eOut accTile ->
-            eOut >>= (\out ->
-                if accTile ^. L.accountTileType /= "CARD" then
-                    Left $ "Unknown cardType " <> accTile ^. L.cardType
-                else do
-                    txnRaws <- goTxns (accTile ^. L.transactions ^. L.result)
-                    Right $ (emptyMergeAccount &
-                        L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
-                        L._type .~ Credit &
-                        L.number .~ accTile ^. L.mask &
-                        L.name .~ accTile ^. L.cardType &
-                        L._3pLink .~ show (accTile ^. L.accountId) &
-                        L.txns .~ txnRaws):out))
+        (\eOut accTile -> do
+            out <- eOut
+            if accTile ^. L.accountTileType /= "CARD" then
+                Left $ "Unknown cardType " <> accTile ^. L.cardType
+            else do
+                txnRaws <- goTxns (accTile ^. L.transactions ^. L.result)
+                Right $ (emptyMergeAccount &
+                    L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
+                    L._type .~ Credit &
+                    L.number .~ accTile ^. L.mask &
+                    L.name .~ accTile ^. L.cardType &
+                    L._3pLink .~ show (accTile ^. L.accountId) &
+                    L.txns .~ txnRaws):out)
         (Right [])
-        accTiles
 
 -- TODO EitherT ?
 scrape :: (MonadIO m) => ChaseCreds -> m (Either Text [MergeAccount])

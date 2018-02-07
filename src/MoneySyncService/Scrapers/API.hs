@@ -14,6 +14,8 @@ module MoneySyncService.Scrapers.API where
 import           Data.Aeson              (Value)
 import           Data.Aeson.TH           (Options (..), defaultOptions,
                                           deriveJSON)
+import           Data.Csv                (DefaultOrdered (..),
+                                          FromNamedRecord (..), header, (.:))
 import           Data.Proxy              (Proxy (..))
 import           Network.HTTP.Client     (managerResponseTimeout, newManager,
                                           responseTimeoutMicro)
@@ -25,17 +27,64 @@ import           Servant.Client          (BaseUrl (..), ClientEnv (..), ClientM,
                                           Scheme (Http), ServantError, client,
                                           runClientM)
 
--- TODO duplicaterecordfields + makeFieldsNoPrefix
-data BofaRequest =
-    BofaRequest {
-        _username :: Text
+data BofaDebitCsv =
+    BofaDebitCsv {
+        _date        :: !Text
+      , _description :: !Text
+      , _amount      :: !Text
+      , _runningBal  :: !Text
     } deriving (Eq, Show)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaRequest)
+
+instance FromNamedRecord BofaDebitCsv where
+    parseNamedRecord m = BofaDebitCsv <$> m .: "Date" <*> m .: "Description" <*> m .: "Amount" <*> m .: "Running Bal."
+
+instance DefaultOrdered BofaDebitCsv where
+    headerOrder _ = header ["Date", "Description", "Amount", "Running Bal."]
+
+data BofaCreditCsv =
+    BofaCreditCsv {
+        _postedDate      :: !Text
+      , _referenceNumber :: !Text
+      , _payee           :: !Text
+      , _address         :: !Text
+      , _amount          :: !Text
+    } deriving (Eq, Show)
+
+instance FromNamedRecord BofaCreditCsv where
+    parseNamedRecord m = BofaCreditCsv <$>
+        m .: "Posted Date"      <*>
+        m .: "Reference Number" <*>
+        m .: "Payee" <*>
+        m .: "Address" <*>
+        m .: "Amount"
+
+instance DefaultOrdered BofaCreditCsv where
+    headerOrder _ = header ["Posted Date", "Reference Number", "Payee", "Address", "Amount"]
+
+
+data BofaCreds =
+    BofaCreds {
+        _username              :: Text
+      , _password              :: Text
+      , _secretQuestionAnswers :: Map Text Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaCreds)
+
+data BofaDownloadedData =
+    BofaDownloadedData {
+        _balance   :: Text
+      , _accountId :: Text
+      , _csv       :: Text
+      , _name      :: Text
+      , __type     :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaDownloadedData)
 
 data BofaResponse =
     BofaResponse {
-        _csv :: Maybe Text
-      , _ok  :: Bool
+        _downloadedData :: Maybe [BofaDownloadedData]
+      , _log            :: Value
+      , _ok             :: Bool
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaResponse)
 
@@ -93,10 +142,10 @@ data ChaseResponse =
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseResponse)
 
-type API = "bofa"  :> ReqBody '[JSON] BofaRequest :> Post '[JSON] BofaResponse
+type API = "bofa"  :> ReqBody '[JSON] BofaCreds :> Post '[JSON] BofaResponse
       :<|> "chase" :> ReqBody '[JSON] ChaseCreds :> Post '[JSON] ChaseResponse
 
-scrapeBofa  :: BofaRequest  -> ClientM BofaResponse
+scrapeBofa  :: BofaCreds  -> ClientM BofaResponse
 scrapeChase :: ChaseCreds -> ClientM ChaseResponse
 scrapeBofa :<|> scrapeChase = client (Proxy :: Proxy API)
 

@@ -18,12 +18,14 @@ library
                      , MoneySyncService.Types
                      , MoneySyncService.UpdateThread
                      , MoneySyncService.Scrapers.API
+                     , MoneySyncService.Scrapers.Bofa
                      , MoneySyncService.Scrapers.Chase
                      , Util
                      , Lenses
   build-depends:       base >= 4.7 && < 5
                      , acid-state
                      , aeson
+                     , cassava
                      , clientsession
                      , cereal
                      , containers
@@ -42,6 +44,7 @@ library
                      , servant-server
                      , text
                      , time
+                     , vector
                      , wai
                      , warp
   default-language:    Haskell2010

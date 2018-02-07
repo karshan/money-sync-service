@@ -27,3 +27,8 @@ makeFieldsNoPrefix ''ChaseTransactions
 makeFieldsNoPrefix ''ChaseTileDetail
 makeFieldsNoPrefix ''ChaseAccountTile
 makeFieldsNoPrefix ''ChaseResponse
+makeFieldsNoPrefix ''BofaCreds
+makeFieldsNoPrefix ''BofaDownloadedData
+makeFieldsNoPrefix ''BofaDebitCsv
+makeFieldsNoPrefix ''BofaCreditCsv
+makeFieldsNoPrefix ''BofaResponse
