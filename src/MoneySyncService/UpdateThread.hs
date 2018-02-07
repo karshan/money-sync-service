@@ -32,9 +32,9 @@ updateThread c@NotificationConfig{..} = do
                     eResult <- Bofa.scrape bofaReq
                     either
                         (\e -> do
-                            liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                "money-sync-service bofa-scraper error" e
-                            addErrorLog e)
+                            addErrorLog e
+                            void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                "money-sync-service bofa-scraper error" e)
                         (merge (i ^. L.id))
                         eResult
                 ChaseCredsT chaseReq -> do

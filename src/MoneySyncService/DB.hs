@@ -147,14 +147,13 @@ putAccount instId mergeAcc = do
             acc ^. L._3pLink  == mergeAcc ^. L._3pLink) . view accountDB <$> get
     existingAccIds <- Map.keysSet . view accountDB <$> get
     curTxns <- view txnDB <$> get
-    newId <- generateId existingAccIds
-    let accId = fromMaybe newId (view L.id <$> mExistingAcc)
+    accId <- maybe (generateId existingAccIds) return (view L.id <$> mExistingAcc)
     let existingBals = fromMaybe [] (view L.balances <$> mExistingAcc)
     let newTxns = removeDupeTxns accId curTxns (mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
     mergedTxnIds <- Map.keysSet . view txnDB <$> get
     let newBal = emptyBalance & L.amount .~ mergeAcc ^. L.balance & L.txnIds .~ mergedTxnIds
-    modify (over accountDB (Map.insert newId (mkAccount instId accId (newBal:existingBals) mergeAcc)))
+    modify (over accountDB (Map.insert accId (mkAccount instId accId (newBal:existingBals) mergeAcc)))
     return accId
 
 mkAccount :: InstitutionId -> AccountId -> [Balance] -> MergeAccount -> Account

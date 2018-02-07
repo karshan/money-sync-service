@@ -58,6 +58,11 @@ parseBalance :: Text -> Either Text Int
 parseBalance b = maybeToEither ("Failed to parse balance " <> b) . fmap dblUsd . readMaybe .
     toS . T.filter (\c -> c /= '$' && c /= ',') $ b
 
+drop2nd :: [a] -> [a]
+drop2nd [] = []
+drop2nd (x:[]) = [x]
+drop2nd (x:y:xs) = x:xs
+
 goAccs :: [BofaDownloadedData] -> Either Text [MergeAccount]
 goAccs =
     foldl
@@ -68,13 +73,15 @@ goAccs =
             else do
                 let isDebit = d ^. L._type == "DEBIT"
                 -- Debit CSV file has some non csv metadata on the top 6 lines which must be dropped
+                -- also the first transaction is "Beginning balance as of..." TODO assert this by checking
+                -- the descrition field matches "Beginning balance"  and that amount is empty
                 txnRaws <- bool (goTxns parseCreditTxn) (goTxns parseDebitTxn) isDebit $
-                                bool identity (T.unlines . drop 6 . T.lines) isDebit $ d ^. L.csv
+                                bool identity (T.unlines . drop2nd . drop 6 . T.lines) isDebit $ d ^. L.csv
                 bal <- parseBalance $ d ^. L.balance
                 Right $ (emptyMergeAccount &
                     L.balance .~ bal &
                     L._type .~ bool Credit Debit isDebit &
-                    L.number .~ d ^. L.name & -- TODO parse name and get number
+                    L.number .~ T.reverse (T.take 4 (T.reverse (d ^. L.name))) &
                     L.name .~ d ^. L.name &
                     L._3pLink .~ d ^. L.accountId &
                     L.txns .~ txnRaws):out)

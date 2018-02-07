@@ -38,7 +38,7 @@ data AppConfig =
     } deriving (Eq, Show)
 
 defaultAppConfig :: AppConfig
-defaultAppConfig = AppConfig "db" "127.0.0.1" 8001 (NotificationConfig "svc-acc-key.json" "" "")
+defaultAppConfig = AppConfig "db" "127.0.0.1" 8001 (NotificationConfig "svc-acc-key.json" "karshan@karshan.me" "karshan.sharma@gmail.com")
 
 data InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
 
