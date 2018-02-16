@@ -39,8 +39,8 @@ data Database =
     }
 makeLenses ''Database
 
-emptyDB :: Database
-emptyDB = Database Map.empty Map.empty Map.empty Map.empty [] (mkStdGen 0)
+emptyDB :: StdGen -> Database
+emptyDB stdGen = Database Map.empty Map.empty Map.empty Map.empty [] stdGen
 
 getDBEvt :: Query Database GetDBResponse
 getDBEvt =
@@ -127,7 +127,8 @@ putTxn accId txn = do
 
 -- TODO error if non-existent institution id ?
 -- TODO verify new balance against old balance here and report failures ?
-putAccount :: InstitutionId -> MergeAccount -> Update Database AccountId
+putAccount :: InstitutionId -> MergeAccount
+           -> Update Database (AccountId, Int) -- ^ (generated/existing id, number of merged txns)
 putAccount instId mergeAcc = do
     mExistingAcc <- head . Map.elems . Map.filter
         (\acc ->
@@ -156,7 +157,7 @@ putAccount instId mergeAcc = do
                 -- In theory we should add mergeAcc.balance to existingOldBals here
                 (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
     modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
-    return accId
+    return (accId, length newTxnIds)
 
 mkAccount :: InstitutionId -> AccountId -> Balance -> [Balance] -> MergeAccount -> Account
 mkAccount instId accId curBal oldBals mAcc =
@@ -181,9 +182,10 @@ mkTxn accId tId txn =
         L.meta .~ txn ^. L.meta &
         L.tags .~ txn ^. L.tags
 
-mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database ()
+-- Returns number of merged txns
+mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database [(AccountId, Int)]
 mergeEvt gInstId mergeAccs =
-    mapM_ (putAccount gInstId) mergeAccs
+    mapM (putAccount gInstId) mergeAccs
 
 addInstEvt :: CreateInstitution -> Update Database ()
 addInstEvt a = do
@@ -275,7 +277,7 @@ getDB = (`query'` GetDBEvt) =<< ask
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
 
-merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m ()
+merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, Int)]
 merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
 
 addInst :: (MonadReader DBHandle m, MonadIO m) => CreateInstitution -> m ()
@@ -294,4 +296,6 @@ clearErrorLog :: (MonadReader DBHandle m, MonadIO m) => m ()
 clearErrorLog = (`update'` ClearErrorLogEvt) =<< ask
 
 openDB :: FilePath -> IO DBHandle
-openDB fp = openLocalStateFrom fp emptyDB
+openDB fp = do
+    stdGen <- getStdGen
+    openLocalStateFrom fp (emptyDB stdGen)
