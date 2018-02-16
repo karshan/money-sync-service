@@ -13,8 +13,8 @@ module MoneySyncService.Types where
 import           Control.Lens.TH               (makeLenses)
 import           Data.Aeson                    (FromJSONKey, ToJSONKey)
 import           Data.Aeson.TH                 (defaultOptions, deriveJSON)
+import           Data.List.NonEmpty            (NonEmpty ((:|)))
 import qualified Data.Map                      as Map
-import qualified Data.Sequence                 as S
 import qualified Data.Set                      as Set
 import           Data.Time.Calendar            (Day (..))
 import           GHC.Generics                  (Generic)
@@ -69,6 +69,8 @@ data Txn =
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Txn)
 
+-- TODO get rid of empty_ and construct types using { _field = value } ?
+-- does DuplicateRecordFields suck for this ? I don't think so
 emptyTxn :: Txn
 emptyTxn = Txn "" "" (ModifiedJulianDay 0) 0 "" Map.empty Set.empty
 
@@ -84,16 +86,12 @@ $(deriveJSON defaultOptions ''FcstTxn)
 data Balance =
     Balance {
         _amount :: Int
-
-        -- the DB api doesn't allow deleting a Txn without
-        -- also deleting the corresponding account. So TxnId
-        -- references are guaranteed to resolve.
-      , _txnIds :: Set TxnId
+      , _txnId  :: TxnId
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Balance)
 
 emptyBalance :: Balance
-emptyBalance = Balance 0 Set.empty
+emptyBalance = Balance 0 ""
 
 type Username = Text
 type Password = Text
@@ -110,7 +108,8 @@ $(deriveJSON defaultOptions ''Creds)
 data Account =
     Account {
         _id            :: AccountId
-      , _balances      :: [Balance] -- TODO NonEmptyList Balance
+      , _balance       :: Balance
+      , _oldBalances   :: [Balance]
       , __type         :: AccountType
       , _number        :: Text
       , _name          :: Text
@@ -123,7 +122,7 @@ data Account =
 $(deriveJSON defaultOptions ''Account)
 
 emptyAccount :: Account
-emptyAccount = Account "" [] Credit "" "" (InstitutionId "") ""
+emptyAccount = Account "" emptyBalance [] Credit "" "" (InstitutionId "") ""
 
 data Institution =
     Institution {
@@ -157,11 +156,11 @@ data MergeAccount =
       , _number  :: Text
       , _name    :: Text
       , __3pLink :: Text
-      , _txns    :: Seq TxnRaw
+      , _txns    :: NonEmpty TxnRaw
     } deriving (Eq, Show)
 
 emptyMergeAccount :: MergeAccount
-emptyMergeAccount = MergeAccount 0 Credit "" "" "" S.empty
+emptyMergeAccount = MergeAccount 0 Credit "" "" "" (emptyTxnRaw :| [])
 
 data CreateInstitution =
     CreateInstitution {

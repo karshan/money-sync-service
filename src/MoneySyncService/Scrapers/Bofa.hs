@@ -12,10 +12,10 @@ import Control.Lens
 import Protolude
 import Data.Csv (decodeByName, FromNamedRecord)
 import qualified Data.Text as T
-import qualified Data.Sequence as Seq
 import           Data.Time                     (Day, UTCTime (..))
 import           Data.Time.Format              (defaultTimeLocale, parseTimeM)
 import Util (dblUsd)
+import Data.List.NonEmpty (nonEmpty)
 
 parseDate :: Text -> Either Text Day
 parseDate dateS =
@@ -43,15 +43,15 @@ parseCreditTxn t = do
         L.date .~ dt &
         L.amount .~ dblUsd amt)
 
-goTxns :: FromNamedRecord a => (a -> Either Text TxnRaw) -> Text -> Either Text (Seq TxnRaw)
+goTxns :: FromNamedRecord a => (a -> Either Text TxnRaw) -> Text -> Either Text [TxnRaw]
 goTxns txnParser csvText = do
     (_, ts) <- over _Left toS . decodeByName . toS $ csvText
     foldl
         (\eOut t -> do
             out <- eOut
             parsedT <- txnParser t
-            return $ out Seq.|> parsedT)
-        (Right Seq.empty)
+            return $ parsedT:out)
+        (Right [])
         ts
 
 parseBalance :: Text -> Either Text Int
@@ -75,16 +75,22 @@ goAccs =
                 -- Debit CSV file has some non csv metadata on the top 6 lines which must be dropped
                 -- also the first transaction is "Beginning balance as of..." TODO assert this by checking
                 -- the descrition field matches "Beginning balance"  and that amount is empty
-                txnRaws <- bool (goTxns parseCreditTxn) (goTxns parseDebitTxn) isDebit $
-                                bool identity (T.unlines . drop2nd . drop 6 . T.lines) isDebit $ d ^. L.csv
+                -- TODO parse balance from debit csv
+                lTxnRaws <-
+                    bool (goTxns parseCreditTxn) (goTxns parseDebitTxn) isDebit $
+                        bool identity (T.unlines . drop2nd . drop 6 . T.lines) isDebit $ d ^. L.csv
                 bal <- parseBalance $ d ^. L.balance
-                Right $ (emptyMergeAccount &
-                    L.balance .~ bal &
-                    L._type .~ bool Credit Debit isDebit &
-                    L.number .~ T.reverse (T.take 4 (T.reverse (d ^. L.name))) &
-                    L.name .~ d ^. L.name &
-                    L._3pLink .~ d ^. L.accountId &
-                    L.txns .~ txnRaws):out)
+                maybe
+                    (return out) -- TODO log empty txns ?
+                    (\txnRaws ->
+                        Right $ (emptyMergeAccount &
+                            L.balance .~ bal &
+                            L._type .~ bool Credit Debit isDebit &
+                            L.number .~ T.reverse (T.take 4 (T.reverse (d ^. L.name))) &
+                            L.name .~ d ^. L.name &
+                            L._3pLink .~ d ^. L.accountId &
+                            L.txns .~ txnRaws):out)
+                    (nonEmpty lTxnRaws))
         (Right [])
 
 scrape :: MonadIO m => BofaCreds -> m (Either Text [MergeAccount])

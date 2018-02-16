@@ -16,12 +16,11 @@ import           Data.Acid                     (AcidState, Query, Update,
                                                 query, update)
 import qualified Data.Map.Strict               as Map
 import           Data.SafeCopy                 (base, deriveSafeCopy)
-import           Data.Sequence                 (Seq, (|>))
-import qualified Data.Sequence                 as S
 import qualified Data.Set                      as Set
 import qualified Lenses                        as L
 import           MoneySyncService.Scrapers.API
 import           MoneySyncService.Types
+import           Prelude                       (error)
 import           Protolude
 import           Servant                       (Handler)
 import           System.Random
@@ -80,43 +79,32 @@ generateId existingIds = do
                       else
                           go nextG
 
--- | Merges a list of new transactions into the db, assigning each txn a unique
--- id.
+-- | Remove duplicate txns in given [TxnRaw]
 --
--- This is an acid avent because it must be atomic. (read txns and update)
---
--- In theory it would be possible to use the same transaction id's given by
--- data providers (chase/bofa/plaid) but we don't.
---
--- The new transaction list can include transactions already in the db which
--- mustn't be duplicated. We use the following data to check for a duplicate
+-- We use the following data to check for a duplicate
 -- existing transactions:
---   txnName
---   txnDate
---   txnAmount
---   txnAccount
+--   name
+--   date
+--   amount
+--   accountId
 -- We need to be careful when checking for duplicates, we cannot just check each
--- new transaction against the txnDB. Whenever we find a duplicate existing
+-- new transaction against the curTxns. Whenever we find a duplicate existing
 -- transaction, it needs to be removed from the pool of transactions we check for
 -- duplicates from. This must be done to avoid a case like the following:
 --   The existing db contains a txn Chipotle,2017-01-01,$12.4
 --   New transaction set contains 2 txn's Chipotle,2017-01-01,$12.4
 -- If we checked each new txn against the txnDB, no new txn's would be added!
 --
--- It is an error if a new txn refers to an accountId not in the db
---
--- TODO newTxns should have a type that indicates they don't have a txnId
--- TODO fix this docstring after code refactor
 -- TODO rewrite using StateT existingPool (Either Text) ?
--- This function assumes newTxns doesn't contain any txns refering to invalid accountIds
--- if not $ (txn ^. txnAccount) `Set.member` accountIds db then
--- (Left ("txn refers to unknown accountId " <> show txn), existingPool)
-removeDupeTxns :: AccountId -> Map TxnId Txn -> Seq TxnRaw -> Seq TxnRaw
+removeDupeTxns :: AccountId     -- ^ AccountId associated with newTxns
+               -> Map TxnId Txn -- ^ current Txn database
+               -> [TxnRaw]      -- ^ newTxns: remove duplicates in this list
+               -> [TxnRaw]
 removeDupeTxns accId curTxns newTxns =
     fst $ foldl
         (\(outTxns, existingPool) txn ->
             maybe
-                (outTxns |> txn, existingPool)
+                (txn:outTxns, existingPool)
                 (\existingDupe ->
                     (outTxns, Map.delete (existingDupe ^. L.id) existingPool))
                 (head $ Map.filter
@@ -126,7 +114,7 @@ removeDupeTxns accId curTxns newTxns =
                         txn ^. L.amount == existingT ^. L.amount &&
                         accId == existingT ^. L.accountId)
                     existingPool))
-        (S.empty, curTxns) -- TODO we can use a Map for existingPool also
+        ([], curTxns) -- TODO we can use a Map for existingPool also
         newTxns
 
 -- TODO error if refer to non-existent account id ?
@@ -148,19 +136,34 @@ putAccount instId mergeAcc = do
     existingAccIds <- Map.keysSet . view accountDB <$> get
     curTxns <- view txnDB <$> get
     accId <- maybe (generateId existingAccIds) return (view L.id <$> mExistingAcc)
-    let existingBals = fromMaybe [] (view L.balances <$> mExistingAcc)
-    let newTxns = removeDupeTxns accId curTxns (mergeAcc ^. L.txns)
+    let existingOldBals = fromMaybe [] (view L.oldBalances <$> mExistingAcc)
+    let newTxns = removeDupeTxns accId curTxns (toList $ mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
-    mergedTxnIds <- Map.keysSet . view txnDB <$> get
-    let newBal = emptyBalance & L.amount .~ mergeAcc ^. L.balance & L.txnIds .~ mergedTxnIds
-    modify (over accountDB (Map.insert accId (mkAccount instId accId (newBal:existingBals) mergeAcc)))
+    let sortDesc a b = (flip compare `on` (view L.date)) a b <> (flip compare `on` (view L.id)) a b
+    -- It should be impossible for an account to have 0 txns
+    latestTxnId <- fromMaybe (error "Account with 0 txns") . map (view L.id) . head . sortBy sortDesc . toList .
+        Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
+    let mExistingCurBal = view L.balance <$> mExistingAcc
+    let (newCurBal, newOldBals) =
+            -- If the database contains newer txns than the txns in this merge
+            -- don't update the current balance (the balance is old).
+            if latestTxnId `Set.member` newTxnIds then
+                (emptyBalance &
+                    L.amount .~ mergeAcc ^. L.balance &
+                    L.txnId .~ latestTxnId
+                  , maybe existingOldBals (:existingOldBals) mExistingCurBal)
+            else
+                -- In theory we should add mergeAcc.balance to existingOldBals here
+                (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
+    modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
     return accId
 
-mkAccount :: InstitutionId -> AccountId -> [Balance] -> MergeAccount -> Account
-mkAccount instId accId bals mAcc =
+mkAccount :: InstitutionId -> AccountId -> Balance -> [Balance] -> MergeAccount -> Account
+mkAccount instId accId curBal oldBals mAcc =
     emptyAccount &
         L.id .~ accId &
-        L.balances .~ bals &
+        L.balance .~ curBal &
+        L.oldBalances .~ oldBals &
         L._type .~ mAcc ^. L._type &
         L.number .~ mAcc ^. L.number &
         L.name .~ mAcc ^. L.name &
