@@ -121,7 +121,7 @@ data ChaseTransactions =
     ChaseTransactions {
         _accountId      :: Int
       , _pendingCharges :: Double
-      , _result         :: [ChaseTransaction]
+      , _result         :: Maybe [ChaseTransaction]
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseTransactions)
 

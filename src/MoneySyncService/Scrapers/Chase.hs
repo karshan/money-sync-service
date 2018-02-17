@@ -46,20 +46,23 @@ goAccs =
             out <- eOut
             if accTile ^. L.accountTileType /= "CARD" then
                 Left $ "Unknown cardType " <> accTile ^. L.cardType
-            else do
-                lTxnRaws <- goTxns (filter ((== False) . view L.pending) $ accTile ^. L.transactions ^. L.result)
+            else
                 maybe
-                    (return out) -- TODO log empty transactions ?
-                    (\txnRaws ->
-                        Right $ (emptyMergeAccount &
-                            L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
-                            L._type .~ Credit &
-                            L.number .~ accTile ^. L.mask &
-                            L.name .~ accTile ^. L.cardType &
-                            L._3pLink .~ show (accTile ^. L.accountId) &
-                            L.txns .~ txnRaws):out)
-                    (nonEmpty lTxnRaws))
-
+                    (return out)
+                    (\res -> do
+                        lTxnRaws <- goTxns res
+                        maybe
+                            (return out) -- Don't actually think this is possible, chase would return result: [] (it usually just omits result entirely)
+                            (\txnRaws ->
+                                Right $ (emptyMergeAccount &
+                                    L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
+                                    L._type .~ Credit &
+                                    L.number .~ accTile ^. L.mask &
+                                    L.name .~ accTile ^. L.cardType &
+                                    L._3pLink .~ show (accTile ^. L.accountId) &
+                                    L.txns .~ txnRaws):out)
+                            (nonEmpty lTxnRaws))
+                    (accTile ^. L.transactions ^. L.result))
         (Right [])
 
 -- TODO EitherT ?

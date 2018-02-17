@@ -23,7 +23,7 @@ import           MoneySyncService.Types
 import           Prelude                       (error)
 import           Protolude
 import           Servant                       (Handler)
-import           System.Random
+import           System.Random                 (StdGen, mkStdGen)
 import           Util                          (randomText)
 
 -- TODO is it possible to ensure with types that the DB can never contain
@@ -39,8 +39,8 @@ data Database =
     }
 makeLenses ''Database
 
-emptyDB :: StdGen -> Database
-emptyDB stdGen = Database Map.empty Map.empty Map.empty Map.empty [] stdGen
+emptyDB :: Database
+emptyDB = Database Map.empty Map.empty Map.empty Map.empty [] (mkStdGen 0)
 
 getDBEvt :: Query Database GetDBResponse
 getDBEvt =
@@ -297,5 +297,4 @@ clearErrorLog = (`update'` ClearErrorLogEvt) =<< ask
 
 openDB :: FilePath -> IO DBHandle
 openDB fp = do
-    stdGen <- getStdGen
-    openLocalStateFrom fp (emptyDB stdGen)
+    openLocalStateFrom fp emptyDB

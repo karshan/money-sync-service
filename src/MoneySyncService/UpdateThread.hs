@@ -42,17 +42,17 @@ updateThread c@NotificationConfig{..} = do
                             addErrorLog e
                             void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                 "money-sync-service bofa-scraper error" e)
-                        (printMergeResults "Bofa" <=< merge (i ^. L.id))
+                        (\result -> printMergeResults ("Bofa[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
                         eResult
                 ChaseCredsT chaseReq -> do
                     eResult <- Chase.scrape chaseReq
                     either
                         (\e -> do
                             liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                "money-sync-service chas-scraper error" e
+                                "money-sync-service chase-scraper error" e
                             addErrorLog e)
-                        (printMergeResults "Chase" <=< merge (i ^. L.id))
+                        (\result -> printMergeResults ("Chase[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
                         eResult)
         is
-    minuteDelay (8 * 3600)
+    minuteDelay (1 * 3600)
     updateThread c
