@@ -54,5 +54,5 @@ updateThread c@NotificationConfig{..} = do
                         (\result -> printMergeResults ("Chase[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
                         eResult)
         is
-    minuteDelay (1 * 3600)
+    minuteDelay (4 * 60)
     updateThread c
