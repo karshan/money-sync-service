@@ -27,6 +27,16 @@ import           Servant.Client          (BaseUrl (..), ClientEnv (..), ClientM,
                                           Scheme (Http), ServantError, client,
                                           runClientM)
 
+data BofaDebitBalanceCsv =
+    BofaDebitBalanceCsv {
+        _description :: !Text
+      , _empty       :: !Text
+      , _summaryAmt  :: !Text
+    } deriving (Eq, Show)
+
+instance FromNamedRecord BofaDebitBalanceCsv where
+    parseNamedRecord m = BofaDebitBalanceCsv <$> m .: "Description" <*> m .: "" <*> m .: "Summary Amt."
+
 data BofaDebitCsv =
     BofaDebitCsv {
         _date        :: !Text

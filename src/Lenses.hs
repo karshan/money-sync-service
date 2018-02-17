@@ -30,5 +30,6 @@ makeFieldsNoPrefix ''ChaseResponse
 makeFieldsNoPrefix ''BofaCreds
 makeFieldsNoPrefix ''BofaDownloadedData
 makeFieldsNoPrefix ''BofaDebitCsv
+makeFieldsNoPrefix ''BofaDebitBalanceCsv
 makeFieldsNoPrefix ''BofaCreditCsv
 makeFieldsNoPrefix ''BofaResponse
