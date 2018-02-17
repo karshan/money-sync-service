@@ -10,6 +10,9 @@ module MoneySyncService.UpdateThread
 
 import           Control.Lens
 import qualified Data.Map                        as Map
+import           Data.Time.Clock                 (getCurrentTime)
+import           Data.Time.LocalTime             (getCurrentTimeZone,
+                                                  utcToLocalTime)
 import           Google.SendMail                 (sendMail')
 import qualified Lenses                          as L
 import           MoneySyncService.DB
@@ -17,14 +20,14 @@ import qualified MoneySyncService.Scrapers.Bofa  as Bofa
 import qualified MoneySyncService.Scrapers.Chase as Chase
 import           MoneySyncService.Types
 import           Protolude
-import Data.Time.Clock (getCurrentTime)
 
 minuteDelay :: MonadIO m => Int -> m ()
 minuteDelay n = liftIO $ threadDelay (n * 60 * 1000000)
 
 printMergeResults :: MonadIO m => Text -> [(AccountId, Int)] -> m ()
 printMergeResults tag mergeResults = do
-    curTime <- liftIO getCurrentTime
+    tz <- liftIO getCurrentTimeZone
+    curTime <- utcToLocalTime tz <$> liftIO getCurrentTime
     putStrLn $ "[" <> show curTime <> "]" <> " Merge Results <" <> tag <> ">: "
     print mergeResults
 
