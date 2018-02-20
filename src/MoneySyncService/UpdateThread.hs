@@ -20,16 +20,25 @@ import qualified MoneySyncService.Scrapers.Bofa  as Bofa
 import qualified MoneySyncService.Scrapers.Chase as Chase
 import           MoneySyncService.Types
 import           Protolude
+import           Text.Show.Pretty                (ppShow)
 
 minuteDelay :: MonadIO m => Int -> m ()
 minuteDelay n = liftIO $ threadDelay (n * 60 * 1000000)
 
-printMergeResults :: MonadIO m => Text -> [(AccountId, Int)] -> m ()
-printMergeResults tag mergeResults = do
+logMergeResults :: MonadIO m => NotificationConfig -> Text -> [(AccountId, [TxnRaw])] -> m ()
+logMergeResults NotificationConfig{..} tag mergeResults = do
     tz <- liftIO getCurrentTimeZone
     curTime <- utcToLocalTime tz <$> liftIO getCurrentTime
-    putStrLn $ "[" <> show curTime <> "]" <> " Merge Results <" <> tag <> ">: "
-    print mergeResults
+    putStr $ "[" <> show curTime <> "]" <> " Merge Results <" <> tag <> ">: "
+    let numNewTxns = length $ concatMap snd mergeResults
+    if numNewTxns == 0 then
+        putStrLn "No new txns"
+    else do
+        putStrLn ""
+        void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+            (tag <> " has " <> show numNewTxns <> " New Transactions")
+            (ppShow mergeResults)
+        print mergeResults
 
 updateThread :: (MonadReader DBHandle m, MonadIO m) => NotificationConfig -> m ()
 updateThread c@NotificationConfig{..} = do
@@ -45,7 +54,7 @@ updateThread c@NotificationConfig{..} = do
                             addErrorLog e
                             void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                 "money-sync-service bofa-scraper error" e)
-                        (\result -> printMergeResults ("Bofa[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
+                        (\result -> logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
                         eResult
                 ChaseCredsT chaseReq -> do
                     eResult <- Chase.scrape chaseReq
@@ -54,7 +63,7 @@ updateThread c@NotificationConfig{..} = do
                             liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                 "money-sync-service chase-scraper error" e
                             addErrorLog e)
-                        (\result -> printMergeResults ("Chase[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
+                        (\result -> logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
                         eResult)
         is
     minuteDelay (4 * 60)

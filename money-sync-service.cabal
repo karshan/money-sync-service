@@ -37,6 +37,7 @@ library
                      , memory
                      , natural-transformation
                      , protolude
+                     , pretty-show
                      , random
                      , safecopy
                      , servant

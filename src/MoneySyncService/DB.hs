@@ -128,7 +128,7 @@ putTxn accId txn = do
 -- TODO error if non-existent institution id ?
 -- TODO verify new balance against old balance here and report failures ?
 putAccount :: InstitutionId -> MergeAccount
-           -> Update Database (AccountId, Int) -- ^ (generated/existing id, number of merged txns)
+           -> Update Database (AccountId, [TxnRaw]) -- ^ (generated/existing id, merged TxnRaws)
 putAccount instId mergeAcc = do
     mExistingAcc <- head . Map.elems . Map.filter
         (\acc ->
@@ -155,9 +155,10 @@ putAccount instId mergeAcc = do
                   , maybe existingOldBals (:existingOldBals) mExistingCurBal)
             else
                 -- In theory we should add mergeAcc.balance to existingOldBals here
+                -- It should be impossible for an account to contain 0 txns
                 (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
     modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
-    return (accId, length newTxnIds)
+    return (accId, newTxns)
 
 mkAccount :: InstitutionId -> AccountId -> Balance -> [Balance] -> MergeAccount -> Account
 mkAccount instId accId curBal oldBals mAcc =
@@ -183,7 +184,7 @@ mkTxn accId tId txn =
         L.tags .~ txn ^. L.tags
 
 -- Returns number of merged txns
-mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database [(AccountId, Int)]
+mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database [(AccountId, [TxnRaw])]
 mergeEvt gInstId mergeAccs =
     mapM (putAccount gInstId) mergeAccs
 
@@ -277,7 +278,7 @@ getDB = (`query'` GetDBEvt) =<< ask
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
 
-merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, Int)]
+merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, [TxnRaw])]
 merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
 
 addInst :: (MonadReader DBHandle m, MonadIO m) => CreateInstitution -> m ()
