@@ -13,7 +13,6 @@ module MoneySyncService.Types where
 import           Control.Lens.TH               (makeLenses)
 import           Data.Aeson                    (FromJSONKey, ToJSONKey)
 import           Data.Aeson.TH                 (defaultOptions, deriveJSON)
-import           Data.List.NonEmpty            (NonEmpty ((:|)))
 import qualified Data.Map                      as Map
 import qualified Data.Set                      as Set
 import           Data.Time.Calendar            (Day (..))
@@ -156,11 +155,11 @@ data MergeAccount =
       , _number  :: Text
       , _name    :: Text
       , __3pLink :: Text
-      , _txns    :: NonEmpty TxnRaw
+      , _txns    :: [TxnRaw]
     } deriving (Eq, Show)
 
 emptyMergeAccount :: MergeAccount
-emptyMergeAccount = MergeAccount 0 Credit "" "" "" (emptyTxnRaw :| [])
+emptyMergeAccount = MergeAccount 0 Credit "" "" "" []
 
 data CreateInstitution =
     CreateInstitution {

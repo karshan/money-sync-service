@@ -1,23 +1,22 @@
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module MoneySyncService.Scrapers.Bofa where
 
-import MoneySyncService.Types
-import MoneySyncService.Scrapers.API
-import qualified Data.Aeson as Aeson
-import qualified Lenses as L
-import Control.Lens
-import Protolude
-import Data.Csv (decodeByName, FromNamedRecord)
-import qualified Data.Text as T
+import           Control.Lens
+import qualified Data.Aeson                    as Aeson
+import           Data.Csv                      (FromNamedRecord, decodeByName)
+import qualified Data.Text                     as T
 import           Data.Time                     (Day, UTCTime (..))
 import           Data.Time.Format              (defaultTimeLocale, parseTimeM)
-import Util (dblUsd)
-import Data.List.NonEmpty (nonEmpty)
-import Prelude ((!!))
+import qualified Lenses                        as L
+import           MoneySyncService.Scrapers.API
+import           MoneySyncService.Types
+import           Prelude                       ((!!))
+import           Protolude
+import           Util                          (dblUsd)
 
 parseDate :: Text -> Either Text Day
 parseDate dateS =
@@ -46,7 +45,7 @@ parseCreditTxn t = do
         L.amount .~ dblUsd amt)
 
 swapEither :: Either a b -> Either b a
-swapEither (Left a) = Right a
+swapEither (Left a)  = Right a
 swapEither (Right a) = Left a
 
 parseDebitBalance :: Text -> Either Text Int
@@ -81,8 +80,8 @@ parseBalance b = maybeToEither ("Failed to parse balance " <> b) . fmap dblUsd .
     toS . T.filter (\c -> c /= '$' && c /= ',') $ b
 
 drop2nd :: [a] -> [a]
-drop2nd [] = []
-drop2nd (x:[]) = [x]
+drop2nd []       = []
+drop2nd (x:[])   = [x]
 drop2nd (x:y:xs) = x:xs
 
 assert :: Bool -> Text -> Either Text ()
@@ -100,7 +99,7 @@ goAccs =
                 let isDebit = d ^. L._type == "DEBIT"
                 -- Debit CSV file has 2 csv's separated by a newline. The top csv is essentially useless
                 -- also the first transaction is "Beginning balance as of..." which needs to be skipped
-                (lTxnRaws, bal) <-
+                (txnRaws, bal) <-
                     if isDebit then do
                         let debitCsvs = T.splitOn "\r\n\r\n" $ d ^. L.csv
                         assert (length debitCsvs == 2) "Scraper.Bofa: length debitCsvs /= 2"
@@ -116,17 +115,13 @@ goAccs =
                         lTxnRaws <- goTxns parseCreditTxn (d ^. L.csv)
                         bal <- parseBalance $ d ^. L.balance
                         return (lTxnRaws, bal)
-                maybe
-                    (return out) -- TODO log empty txns ?
-                    (\txnRaws ->
-                        Right $ (emptyMergeAccount &
-                            L.balance .~ bal &
-                            L._type .~ bool Credit Debit isDebit &
-                            L.number .~ T.reverse (T.take 4 (T.reverse (d ^. L.name))) &
-                            L.name .~ d ^. L.name &
-                            L._3pLink .~ d ^. L.accountId &
-                            L.txns .~ txnRaws):out)
-                    (nonEmpty lTxnRaws))
+                Right $ (emptyMergeAccount &
+                    L.balance .~ bal &
+                    L._type .~ bool Credit Debit isDebit &
+                    L.number .~ T.reverse (T.take 4 (T.reverse (d ^. L.name))) &
+                    L.name .~ d ^. L.name &
+                    L._3pLink .~ d ^. L.accountId &
+                    L.txns .~ txnRaws):out)
         (Right [])
 
 scrape :: MonadIO m => BofaCreds -> m (Either Text [MergeAccount])

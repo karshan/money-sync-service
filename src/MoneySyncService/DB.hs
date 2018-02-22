@@ -9,12 +9,11 @@
 {-# LANGUAGE TypeFamilies          #-}
 module MoneySyncService.DB where
 
-import           Control.Lens                  (over, set, view, (.~), (^.))
+import           Control.Lens                  (over, view, (.~), (^.))
 import           Control.Lens.TH               (makeLenses)
 import           Data.Acid                     (AcidState, Query, Update,
                                                 makeAcidic, openLocalStateFrom,
                                                 query, update)
-import           Data.List.NonEmpty            (nonEmpty)
 import qualified Data.Map.Strict               as Map
 import           Data.SafeCopy                 (base, deriveSafeCopy)
 import qualified Data.Set                      as Set
@@ -283,20 +282,19 @@ getDB = (`query'` GetDBEvt) =<< ask
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
 
-preRemoveDupes :: GetDBResponse -> InstitutionId -> MergeAccount -> Maybe MergeAccount
+preRemoveDupes :: GetDBResponse -> InstitutionId -> MergeAccount -> MergeAccount
 preRemoveDupes dbResp instId m =
     maybe
-        (Just m) -- If no existing account return as is to be created
+        m -- If no existing account return as is to be created
         (\existingAcc ->
-            flip (set L.txns) m <$>
-                nonEmpty (removeDupeTxns (existingAcc ^. L.id) (dbResp ^. L.txns) (toList $ m ^. L.txns)))
+            m & L.txns .~ (removeDupeTxns (existingAcc ^. L.id) (dbResp ^. L.txns) (toList $ m ^. L.txns)))
         (matchingAccount instId (dbResp ^. L.accounts) m)
 
 merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, [TxnRaw])]
 merge instId mergeAccs = do
     acid <- ask
     db <- getDB
-    let newMerges = mapMaybe (preRemoveDupes db instId) mergeAccs
+    let newMerges = map (preRemoveDupes db instId) mergeAccs
     if null newMerges then
         return []
     else

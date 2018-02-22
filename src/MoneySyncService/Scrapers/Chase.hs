@@ -14,7 +14,6 @@ import           MoneySyncService.Scrapers.API
 import           MoneySyncService.Types
 import           Protolude                     hiding (log, mask)
 import           Util                          (dblUsd)
-import Data.List.NonEmpty (nonEmpty)
 
 parseDate :: Text -> Either Text Day
 parseDate dateS =
@@ -50,18 +49,14 @@ goAccs =
                 maybe
                     (return out)
                     (\res -> do
-                        lTxnRaws <- goTxns res
-                        maybe
-                            (return out) -- Don't actually think this is possible, chase would return result: [] (it usually just omits result entirely)
-                            (\txnRaws ->
-                                Right $ (emptyMergeAccount &
-                                    L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
-                                    L._type .~ Credit &
-                                    L.number .~ accTile ^. L.mask &
-                                    L.name .~ accTile ^. L.cardType &
-                                    L._3pLink .~ show (accTile ^. L.accountId) &
-                                    L.txns .~ txnRaws):out)
-                            (nonEmpty lTxnRaws))
+                        txnRaws <- goTxns res
+                        Right $ (emptyMergeAccount &
+                            L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
+                            L._type .~ Credit &
+                            L.number .~ accTile ^. L.mask &
+                            L.name .~ accTile ^. L.cardType &
+                            L._3pLink .~ show (accTile ^. L.accountId) &
+                            L.txns .~ txnRaws):out)
                     (accTile ^. L.transactions ^. L.result))
         (Right [])
 
