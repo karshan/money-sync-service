@@ -9,11 +9,12 @@
 {-# LANGUAGE TypeFamilies          #-}
 module MoneySyncService.DB where
 
-import           Control.Lens                  (over, view, (.~), (^.))
+import           Control.Lens                  (over, set, view, (.~), (^.))
 import           Control.Lens.TH               (makeLenses)
 import           Data.Acid                     (AcidState, Query, Update,
                                                 makeAcidic, openLocalStateFrom,
                                                 query, update)
+import           Data.List.NonEmpty            (nonEmpty)
 import qualified Data.Map.Strict               as Map
 import           Data.SafeCopy                 (base, deriveSafeCopy)
 import qualified Data.Set                      as Set
@@ -125,15 +126,19 @@ putTxn accId txn = do
     modify (over txnDB (Map.insert newId (mkTxn accId newId txn)))
     return newId
 
+matchingAccount :: InstitutionId -> Map AccountId Account -> MergeAccount -> Maybe Account
+matchingAccount instId accDB mergeAcc =
+    head $ Map.elems $ Map.filter
+        (\acc ->
+            acc ^. L.institutionId == instId &&
+            acc ^. L._3pLink  == mergeAcc ^. L._3pLink) accDB
+
 -- TODO error if non-existent institution id ?
 -- TODO verify new balance against old balance here and report failures ?
 putAccount :: InstitutionId -> MergeAccount
            -> Update Database (AccountId, [TxnRaw]) -- ^ (generated/existing id, merged TxnRaws)
 putAccount instId mergeAcc = do
-    mExistingAcc <- head . Map.elems . Map.filter
-        (\acc ->
-            acc ^. L.institutionId == instId &&
-            acc ^. L._3pLink  == mergeAcc ^. L._3pLink) . view accountDB <$> get
+    mExistingAcc <- (\db -> matchingAccount instId (db ^. accountDB) mergeAcc) <$> get
     existingAccIds <- Map.keysSet . view accountDB <$> get
     curTxns <- view txnDB <$> get
     accId <- maybe (generateId existingAccIds) return (view L.id <$> mExistingAcc)
@@ -278,8 +283,24 @@ getDB = (`query'` GetDBEvt) =<< ask
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
 
+preRemoveDupes :: GetDBResponse -> InstitutionId -> MergeAccount -> Maybe MergeAccount
+preRemoveDupes dbResp instId m =
+    maybe
+        (Just m) -- If no existing account return as is to be created
+        (\existingAcc ->
+            flip (set L.txns) m <$>
+                nonEmpty (removeDupeTxns (existingAcc ^. L.id) (dbResp ^. L.txns) (toList $ m ^. L.txns)))
+        (matchingAccount instId (dbResp ^. L.accounts) m)
+
 merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, [TxnRaw])]
-merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
+merge instId mergeAccs = do
+    acid <- ask
+    db <- getDB
+    let newMerges = mapMaybe (preRemoveDupes db instId) mergeAccs
+    if null newMerges then
+        return []
+    else
+        update' acid (MergeEvt instId newMerges)
 
 addInst :: (MonadReader DBHandle m, MonadIO m) => CreateInstitution -> m ()
 addInst institution = (`update'` AddInstEvt institution) =<< ask
