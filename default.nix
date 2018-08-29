@@ -3,7 +3,7 @@
 , http-client, http-client-tls, lens, memory
 , natural-transformation, protolude, random, safecopy, servant
 , servant-client, servant-server, stdenv, text, time, vector, wai
-, warp
+, warp, pretty-show, ctrie
 }:
 mkDerivation {
   pname = "money-sync-service";
@@ -15,7 +15,8 @@ mkDerivation {
     acid-state aeson base cassava cereal clientsession containers
     either gsuite-admin-sendmail http-client http-client-tls lens
     memory natural-transformation protolude random safecopy servant
-    servant-client servant-server text time vector wai warp
+    servant-client servant-server text time vector wai warp pretty-show
+    ctrie
   ];
   executableHaskellDepends = [ base ];
   license = stdenv.lib.licenses.bsd3;

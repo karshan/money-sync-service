@@ -13,4 +13,5 @@ packages:
 extra-deps:
 - acid-state-0.14.3
 flags: {}
+local-bin-path: .
 extra-package-dbs: []

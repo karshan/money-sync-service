@@ -124,14 +124,14 @@ goAccs =
                     L.txns .~ txnRaws):out)
         (Right [])
 
-scrape :: MonadIO m => BofaCreds -> m (Either Text [MergeAccount])
-scrape bofaCreds = do
-    eResp <- run (scrapeBofa bofaCreds)
-    either
-        (return . Left . show)
-        (\resp -> do
-            (resp ^. L.downloadedData) &
-                maybe
-                    (return $ Left $ toS $ Aeson.encode $ resp ^. L.log)
-                    (return . goAccs))
-        eResp
+parse :: ByteString -> Either Text [MergeAccount]
+parse respString = do
+    resp :: BofaResponse <- over _Left toS $ Aeson.eitherDecode (toS respString)
+    maybe
+        (Left $ toS $ Aeson.encode $ resp ^. L.log)
+        goAccs
+        (resp ^. L.downloadedData)
+
+scrape :: MonadIO m => BofaCreds -> Text -> m ()
+scrape bofaCreds webhookUrl = do
+    void $ run (scrapeBofa (BofaRequest bofaCreds webhookUrl))

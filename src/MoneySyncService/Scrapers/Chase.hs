@@ -1,12 +1,13 @@
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- Functions to parse ChaseResponse into Seq Txn
 module MoneySyncService.Scrapers.Chase where
 
 import           Control.Lens
-import           Data.Aeson                    (encode)
+import qualified Data.Aeson                    as Aeson
 import           Data.Time                     (Day, UTCTime (..))
 import           Data.Time.Format              (defaultTimeLocale, parseTimeM)
 import qualified Lenses                        as L
@@ -60,15 +61,14 @@ goAccs =
                     (accTile ^. L.transactions ^. L.result))
         (Right [])
 
--- TODO EitherT ?
-scrape :: (MonadIO m) => ChaseCreds -> m (Either Text [MergeAccount])
-scrape chaseCreds = do
-    eResp <- run (scrapeChase chaseCreds)
-    either
-        (return . Left . show)
-        (\resp -> do
-            (resp ^. L.accountTiles) &
-                maybe
-                    (return $ Left $ toS $ encode $ resp ^. L.log)
-                    (return . goAccs))
-        eResp
+parse :: ByteString -> Either Text [MergeAccount]
+parse respString = do
+    resp :: ChaseResponse <- over _Left toS $ Aeson.eitherDecode (toS respString)
+    maybe
+        (Left $ toS $ Aeson.encode $ resp ^. L.log)
+        goAccs
+        (resp ^. L.accountTiles)
+
+scrape :: (MonadIO m) => ChaseCreds -> Text -> m ()
+scrape chaseCreds webhookUrl = do
+    void $ run (scrapeChase (ChaseRequest chaseCreds webhookUrl))

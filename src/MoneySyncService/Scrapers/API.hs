@@ -71,7 +71,6 @@ instance FromNamedRecord BofaCreditCsv where
 instance DefaultOrdered BofaCreditCsv where
     headerOrder _ = header ["Posted Date", "Reference Number", "Payee", "Address", "Amount"]
 
-
 data BofaCreds =
     BofaCreds {
         _username              :: Text
@@ -79,6 +78,13 @@ data BofaCreds =
       , _secretQuestionAnswers :: Map Text Text
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaCreds)
+
+data BofaRequest =
+    BofaRequest {
+        _creds      :: BofaCreds
+      , _webhookURL :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BofaRequest)
 
 data BofaDownloadedData =
     BofaDownloadedData {
@@ -104,6 +110,13 @@ data ChaseCreds =
       , _password :: Text
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseCreds)
+
+data ChaseRequest =
+    ChaseRequest {
+        _creds      :: ChaseCreds
+      , _webhookURL :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseRequest)
 
 data ChaseTransaction =
     ChaseTransaction {
@@ -152,11 +165,11 @@ data ChaseResponse =
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseResponse)
 
-type API = "bofa"  :> ReqBody '[JSON] BofaCreds :> Post '[JSON] BofaResponse
-      :<|> "chase" :> ReqBody '[JSON] ChaseCreds :> Post '[JSON] ChaseResponse
+type API = "bofa"  :> ReqBody '[JSON] BofaRequest :> Post '[JSON] ()
+      :<|> "chase" :> ReqBody '[JSON] ChaseRequest :> Post '[JSON] ()
 
-scrapeBofa  :: BofaCreds  -> ClientM BofaResponse
-scrapeChase :: ChaseCreds -> ClientM ChaseResponse
+scrapeBofa  :: BofaRequest -> ClientM ()
+scrapeChase :: ChaseRequest -> ClientM ()
 scrapeBofa :<|> scrapeChase = client (Proxy :: Proxy API)
 
 run :: MonadIO m => ClientM resp -> m (Either ServantError resp)
@@ -164,4 +177,4 @@ run rpc = liftIO $ do
     mgr <- newManager (tlsManagerSettings { managerResponseTimeout = responseTimeoutMicro (120 * 10^6) })
     runClientM rpc
         (ClientEnv mgr
-            (BaseUrl Http "localhost" 8002 ""))
+            (BaseUrl Http "localhost" 8003 ""))

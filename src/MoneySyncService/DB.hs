@@ -145,7 +145,7 @@ putAccount instId mergeAcc = do
     let newTxns = removeDupeTxns accId curTxns (toList $ mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
     let sortDesc a b = (flip compare `on` (view L.date)) a b <> (flip compare `on` (view L.id)) a b
-    -- It should be impossible for an account to have 0 txns
+    -- FIXME: there could be an account with 0 txns, fail gracefully
     latestTxnId <- fromMaybe (error "Account with 0 txns") . map (view L.id) . head . sortBy sortDesc . toList .
         Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
     let mExistingCurBal = view L.balance <$> mExistingAcc
@@ -159,7 +159,7 @@ putAccount instId mergeAcc = do
                   , maybe existingOldBals (:existingOldBals) mExistingCurBal)
             else
                 -- In theory we should add mergeAcc.balance to existingOldBals here
-                -- It should be impossible for an account to contain 0 txns
+                -- FIXME: there could be an account with 0 txns, fail gracefully
                 (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
     modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
     return (accId, newTxns)

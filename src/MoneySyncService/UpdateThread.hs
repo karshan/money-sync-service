@@ -21,6 +21,7 @@ import qualified MoneySyncService.Scrapers.Chase as Chase
 import           MoneySyncService.Types
 import           Protolude
 import           Text.Show.Pretty                (ppShow)
+import           Webhook
 
 minuteDelay :: MonadIO m => Int -> m ()
 minuteDelay n = liftIO $ threadDelay (n * 60 * 1000000)
@@ -40,31 +41,37 @@ logMergeResults NotificationConfig{..} tag mergeResults = do
             (ppShow mergeResults)
         print mergeResults
 
-updateThread :: (MonadReader DBHandle m, MonadIO m) => NotificationConfig -> m ()
-updateThread c@NotificationConfig{..} = do
+-- TODO MonadReader AppContext
+updateThread :: (MonadReader DBHandle m, MonadIO m) => WebhookServer -> NotificationConfig -> m ()
+updateThread ws c@NotificationConfig{..} = do
     -- Get institutions from DB, and pass creds to scrape
     is <- Map.elems <$> getInstDB
+    acid <- ask
     mapM_
         (\i -> do
             case i ^. L.creds of
                 BofaCredsT bofaReq -> do
-                    eResult <- Bofa.scrape bofaReq
-                    either
-                        (\e -> do
-                            addErrorLog e
-                            void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                "money-sync-service bofa-scraper error" e)
-                        (\result -> logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
-                        eResult
+                    wUrl <- liftIO $ webhook ws (\resp -> flip runReaderT acid $ do
+                        either
+                            (\e -> do
+                                addErrorLog e
+                                void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                    "money-sync-service bofa-scraper error" e)
+                            (\result -> logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") =<<
+                                            merge (i ^. L.id) result)
+                            (Bofa.parse resp))
+                    Bofa.scrape bofaReq wUrl
                 ChaseCredsT chaseReq -> do
-                    eResult <- Chase.scrape chaseReq
-                    either
-                        (\e -> do
-                            liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                "money-sync-service chase-scraper error" e
-                            addErrorLog e)
-                        (\result -> logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") =<< merge (i ^. L.id) result)
-                        eResult)
+                    wUrl <- liftIO $ webhook ws (\resp -> flip runReaderT acid $ do
+                        either
+                            (\e -> do
+                                addErrorLog e
+                                void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                    "money-sync-service chase-scraper error" e)
+                            (\result -> logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") =<<
+                                            merge (i ^. L.id) result)
+                            (Chase.parse resp))
+                    Chase.scrape chaseReq wUrl)
         is
     minuteDelay (4 * 60)
-    updateThread c
+    updateThread ws c

@@ -22,17 +22,22 @@ library
                      , MoneySyncService.Scrapers.Chase
                      , Util
                      , Lenses
+                     , Webhook
   build-depends:       base >= 4.7 && < 5
                      , acid-state
                      , aeson
+                     , bytestring
+                     , base64-bytestring
                      , cassava
                      , clientsession
                      , cereal
                      , containers
+                     , ctrie
                      , either
                      , gsuite-admin-sendmail
                      , http-client
                      , http-client-tls
+                     , http-types
                      , lens
                      , memory
                      , natural-transformation
