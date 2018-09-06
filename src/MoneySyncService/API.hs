@@ -9,13 +9,19 @@ import           MoneySyncService.DB
 import           MoneySyncService.Types
 import           Protolude
 import           Servant
+import           Prelude (String)
 
 type API = "db" :> "get" :> Get '[JSON] GetDBResponse
       :<|> "institution" :> "create" :> ReqBody '[JSON] CreateInstitution :> Post '[JSON] ()
       :<|> "errorlog" :> "get" :> Get '[JSON] [Text]
       :<|> "errorlog" :> "clear" :> Post '[JSON] ()
 
-api :: Proxy API
+type StaticAPI =
+           API
+      :<|> "static" :> Raw
+      :<|> Verb 'GET 302 '[PlainText] (Headers '[Header "Location" String] NoContent)
+
+api :: Proxy StaticAPI
 api = Proxy
 
 server :: DBHandle -> Server API
@@ -25,4 +31,7 @@ readerServerT :: ServerT API DBHandler
 readerServerT = getDB :<|> addInst :<|> getErrorLog :<|> clearErrorLog
 
 app :: DBHandle -> Application
-app acid = serve api (server acid)
+app acid = serve api $
+    server acid
+        :<|> serveDirectoryFileServer "static/"
+        :<|> return (addHeader "/static/index.html" NoContent)
