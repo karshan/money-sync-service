@@ -28,7 +28,7 @@ data WebhookServer =
 webhookServer :: Exception e => HostPreference -> Port -> IO (Either e WebhookServer)
 webhookServer host port = do
     let app m req f = do
-            maybe (return ())
+            maybe (putText $ "Unexpected webhook call to: " <> show (pathInfo req))
                 (\callback -> do
                     reqBody <- strictRequestBody req
                     callback (toS reqBody :: BS.ByteString)
