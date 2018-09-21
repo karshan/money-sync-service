@@ -5,6 +5,7 @@
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module MoneySyncService.UpdateThread
     (updateThread) where
 
@@ -36,9 +37,10 @@ logMergeResults NotificationConfig{..} tag mergeResults = do
         putStrLn "No new txns"
     else do
         putStrLn ""
-        void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+        sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
             (tag <> " has " <> show numNewTxns <> " New Transactions")
             (ppShow mergeResults)
+        either (\(e :: SomeException) -> liftIO $ putStrLn $ displayException e) (const $ return ()) sendResult
         print mergeResults
 
 -- TODO MonadReader AppContext
@@ -55,8 +57,9 @@ updateThread ws c@NotificationConfig{..} = do
                         either
                             (\e -> do
                                 addErrorLog e
-                                void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                    "money-sync-service bofa-scraper error" e)
+                                sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                    "money-sync-service bofa-scraper error" e
+                                either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
                             (\result -> logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") =<<
                                             merge (i ^. L.id) result)
                             (Bofa.parse resp))
@@ -66,8 +69,9 @@ updateThread ws c@NotificationConfig{..} = do
                         either
                             (\e -> do
                                 addErrorLog e
-                                void $ liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
-                                    "money-sync-service chase-scraper error" e)
+                                sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                    "money-sync-service chase-scraper error" e
+                                either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
                             (\result -> logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") =<<
                                             merge (i ^. L.id) result)
                             (Chase.parse resp))

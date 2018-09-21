@@ -145,6 +145,7 @@ data TxnRaw =
       , _meta   :: Map Text Text
       , _tags   :: Set Tag
     } deriving (Eq, Show)
+$(deriveJSON defaultOptions ''TxnRaw)
 
 emptyTxnRaw :: TxnRaw
 emptyTxnRaw = TxnRaw "" (ModifiedJulianDay 0) 0 Map.empty Set.empty
@@ -158,6 +159,7 @@ data MergeAccount =
       , __3pLink :: Text
       , _txns    :: [TxnRaw]
     } deriving (Eq, Show)
+$(deriveJSON defaultOptions ''MergeAccount)
 
 emptyMergeAccount :: MergeAccount
 emptyMergeAccount = MergeAccount 0 Credit "" "" "" []

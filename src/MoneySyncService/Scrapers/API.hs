@@ -90,7 +90,7 @@ data BofaDownloadedData =
     BofaDownloadedData {
         _balance   :: Text
       , _accountId :: Text
-      , _csv       :: Text
+      , _csvs      :: [Text]
       , _name      :: Text
       , __type     :: Text
     } deriving (Eq, Show)

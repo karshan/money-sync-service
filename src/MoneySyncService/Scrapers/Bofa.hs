@@ -88,6 +88,19 @@ assert :: Bool -> Text -> Either Text ()
 assert False m = Left m
 assert True _  = Right ()
 
+parseDebitCsv :: Text -> Either Text ([TxnRaw], Int)
+parseDebitCsv csv = do
+    let debitCsvs = T.splitOn "\r\n\r\n" csv
+    assert (length debitCsvs == 2) "Scraper.Bofa: length debitCsvs /= 2"
+    let balanceCsv = debitCsvs !! 0
+    let txnCsv = debitCsvs !! 1
+    assert (length (T.lines txnCsv) > 1) "Scraper.Bofa: debitCsvText is empty"
+    assert ("Beginning balance as of " `T.isInfixOf` ((T.lines txnCsv) !! 1))
+        "Scraper.Bofa: First debit csv txn not \"Beginning balance as of...\""
+    bal <- parseDebitBalance balanceCsv
+    lTxnRaws <- goTxns parseDebitTxn $ T.unlines $ drop2nd $ T.lines txnCsv
+    return (lTxnRaws, bal)
+
 goAccs :: [BofaDownloadedData] -> Either Text [MergeAccount]
 goAccs =
     foldl
@@ -101,18 +114,12 @@ goAccs =
                 -- also the first transaction is "Beginning balance as of..." which needs to be skipped
                 (txnRaws, bal) <-
                     if isDebit then do
-                        let debitCsvs = T.splitOn "\r\n\r\n" $ d ^. L.csv
-                        assert (length debitCsvs == 2) "Scraper.Bofa: length debitCsvs /= 2"
-                        let balanceCsv = debitCsvs !! 0
-                        let txnCsv = debitCsvs !! 1
-                        assert (length (T.lines txnCsv) > 1) "Scraper.Bofa: debitCsvText is empty"
-                        assert ("Beginning balance as of " `T.isInfixOf` ((T.lines txnCsv) !! 1))
-                            "Scraper.Bofa: First debit csv txn not \"Beginning balance as of...\""
-                        lTxnRaws <- goTxns parseDebitTxn $ T.unlines $ drop2nd $ T.lines txnCsv
-                        bal <- parseDebitBalance balanceCsv
+                        results <- mapM parseDebitCsv (d ^. L.csvs)
+                        let lTxnRaws = concat $ map fst results
+                        let bal = fromMaybe 0 $ head $ map snd results
                         return (lTxnRaws, bal)
                     else do
-                        lTxnRaws <- goTxns parseCreditTxn (d ^. L.csv)
+                        lTxnRaws <- concat <$> mapM (goTxns parseCreditTxn) (d ^. L.csvs)
                         bal <- parseBalance $ d ^. L.balance
                         return (lTxnRaws, bal)
                 Right $ (emptyMergeAccount &
