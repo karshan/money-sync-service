@@ -24,7 +24,7 @@ import           Prelude                       (error)
 import           Protolude
 import           Servant                       (Handler)
 import           System.Random                 (StdGen, mkStdGen)
-import           Util                          (randomText)
+import           Util                          (randomText, fuzzyMatch)
 
 -- TODO is it possible to ensure with types that the DB can never contain
 -- transactions that refer to a non-existent accountId ?
@@ -109,7 +109,7 @@ removeDupeTxns accId curTxns newTxns =
                     (outTxns, Map.delete (existingDupe ^. L.id) existingPool))
                 (head $ Map.filter
                     (\existingT ->
-                        txn ^. L.name == existingT ^. L.name &&
+                        (txn ^. L.name) `fuzzyMatch` (existingT ^. L.name) &&
                         txn ^. L.date == existingT ^. L.date &&
                         txn ^. L.amount == existingT ^. L.amount &&
                         accId == existingT ^. L.accountId)
@@ -139,15 +139,15 @@ putAccount :: InstitutionId -> MergeAccount
 putAccount instId mergeAcc = do
     mExistingAcc <- (\db -> matchingAccount instId (db ^. accountDB) mergeAcc) <$> get
     existingAccIds <- Map.keysSet . view accountDB <$> get
-    curTxns <- view txnDB <$> get
     accId <- maybe (generateId existingAccIds) return (view L.id <$> mExistingAcc)
+    curTxns <- Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
     let existingOldBals = fromMaybe [] (view L.oldBalances <$> mExistingAcc)
     let newTxns = removeDupeTxns accId curTxns (toList $ mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
     let sortDesc a b = (flip compare `on` (view L.date)) a b <> (flip compare `on` (view L.id)) a b
     -- FIXME: there could be an account with 0 txns, fail gracefully
     latestTxnId <- fromMaybe (error "Account with 0 txns") . map (view L.id) . head . sortBy sortDesc . toList .
-        Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
+            Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
     let mExistingCurBal = view L.balance <$> mExistingAcc
     let (newCurBal, newOldBals) =
             -- If the database contains newer txns than the txns in this merge

@@ -57,6 +57,7 @@ updateThread ws c@NotificationConfig{..} = do
                         either
                             (\e -> do
                                 addErrorLog e
+                                putStrLn "bofa scraper error"
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service bofa-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
@@ -69,6 +70,7 @@ updateThread ws c@NotificationConfig{..} = do
                         either
                             (\e -> do
                                 addErrorLog e
+                                putStrLn "chase scraper error"
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service chase-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)

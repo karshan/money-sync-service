@@ -42,7 +42,7 @@ parseCreditTxn t = do
     return (emptyTxnRaw &
         L.name .~ t ^. L.payee &
         L.date .~ dt &
-        L.amount .~ dblUsd amt)
+        L.amount .~ (negate $ dblUsd amt))
 
 swapEither :: Either a b -> Either b a
 swapEither (Left a)  = Right a
