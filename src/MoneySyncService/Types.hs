@@ -147,14 +147,6 @@ data TxnRaw =
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''TxnRaw)
 
-data ImportTxn =
-    ImportTxn {
-        _amt  :: Int
-      , _date :: Text
-      , _desc :: Text
-    } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''ImportTxn)
-
 emptyTxnRaw :: TxnRaw
 emptyTxnRaw = TxnRaw "" (ModifiedJulianDay 0) 0 Map.empty Set.empty
 
