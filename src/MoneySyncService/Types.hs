@@ -171,6 +171,19 @@ data CreateInstitution =
     } deriving (Eq)
 $(deriveJSON defaultOptions ''CreateInstitution)
 
+data TagOp =
+    AddTags (Set Tag)
+  | RemoveTags (Set Tag)
+  deriving (Eq)
+$(deriveJSON defaultOptions ''TagOp)
+
+data UpdateTags =
+    UpdateTags {
+        _ids :: Set TxnId
+      , _op  :: TagOp
+    } deriving (Eq)
+$(deriveJSON defaultOptions ''UpdateTags)
+
 data InstitutionResponse =
     InstitutionResponse {
         _id   :: InstitutionId

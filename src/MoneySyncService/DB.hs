@@ -221,6 +221,20 @@ updateInstEvt :: InstitutionId -> Creds -> Update Database ()
 updateInstEvt instId newCreds =
     modify (over instDB (Map.adjust (L.creds .~ newCreds) instId))
 
+evalTagOp :: TagOp -> Set Tag -> Set Tag
+evalTagOp (AddTags newTags) origTags = Set.union newTags origTags
+evalTagOp (RemoveTags tagsToRemove) origTags = origTags `Set.difference` tagsToRemove
+
+updateTagsEvt :: UpdateTags -> Update Database ()
+updateTagsEvt req =
+    modify (over txnDB (Map.mapWithKey
+        (\txnId txn ->
+            if txnId `Set.member` (req ^. L.ids) then
+                txn &
+                    L.tags .~ evalTagOp (req ^. L.op) (txn ^. L.tags)
+            else
+                txn)))
+
 addErrorLogEvt :: Text -> Update Database ()
 addErrorLogEvt newLog = modify (over errorLogDB (newLog:))
 
@@ -243,6 +257,8 @@ $(deriveSafeCopy 0 'base ''Database)
 $(deriveSafeCopy 0 'base ''InstitutionResponse)
 $(deriveSafeCopy 0 'base ''GetDBResponse)
 $(deriveSafeCopy 0 'base ''CreateInstitution)
+$(deriveSafeCopy 0 'base ''TagOp)
+$(deriveSafeCopy 0 'base ''UpdateTags)
 $(deriveSafeCopy 0 'base ''StdGen)
 $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'getAccountDBEvt
@@ -254,6 +270,7 @@ $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'addInstEvt
                         , 'removeInstEvt
                         , 'updateInstEvt
+                        , 'updateTagsEvt
                         , 'addErrorLogEvt
                         , 'clearErrorLogEvt
                         ])
@@ -308,6 +325,9 @@ removeInst instId = (`update'` RemoveInstEvt instId) =<< ask
 
 updateInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> Creds -> m ()
 updateInst instId creds = (`update'` UpdateInstEvt instId creds) =<< ask
+
+updateTags :: (MonadReader DBHandle m, MonadIO m) => UpdateTags -> m ()
+updateTags req = (`update'` UpdateTagsEvt req) =<< ask
 
 addErrorLog :: (MonadReader DBHandle m, MonadIO m) => Text -> m ()
 addErrorLog errorLog = (`update'` AddErrorLogEvt errorLog) =<< ask

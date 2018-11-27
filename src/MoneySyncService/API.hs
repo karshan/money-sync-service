@@ -13,6 +13,7 @@ import           Prelude (String)
 
 type API = "db" :> "get" :> Get '[JSON] GetDBResponse
       :<|> "institution" :> "create" :> ReqBody '[JSON] CreateInstitution :> Post '[JSON] ()
+      :<|> "tags" :> "update" :> ReqBody '[JSON] UpdateTags :> Post '[JSON] ()
       :<|> "errorlog" :> "get" :> Get '[JSON] [Text]
       :<|> "errorlog" :> "clear" :> Post '[JSON] ()
 
@@ -28,7 +29,7 @@ server :: DBHandle -> Server API
 server acid = enter (runReaderTNat acid :: DBHandler :~> Handler) readerServerT
 
 readerServerT :: ServerT API DBHandler
-readerServerT = getDB :<|> addInst :<|> getErrorLog :<|> clearErrorLog
+readerServerT = getDB :<|> addInst :<|> updateTags :<|> getErrorLog :<|> clearErrorLog
 
 app :: DBHandle -> Application
 app acid = serve api $
