@@ -10,6 +10,8 @@ packages:
     - gogol-gmail
 - location: https://github.com/karshan/gsuite-admin-sendmail/archive/7d1546ce3e5f81cb9ccf11ba79b53c82fb97c764.zip
   extra-dep: true
+- location: /k/gits/purescript-bridge # https://github.com/albertov/purescript-bridge/archive/65d44fea493a910baaad568c2f4fc756e957168e.zip
+  extra-dep: true
 extra-deps:
 - acid-state-0.14.3
 flags: {}

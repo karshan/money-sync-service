@@ -12,7 +12,11 @@
     "purescript-effect": "^2.0.0",
     "purescript-affjax": "^7.0.0",
     "purescript-halogen": "^4.0.0",
-    "purescript-parsing": "^5.0.1"
+    "purescript-parsing": "^5.0.1",
+    "purescript-profunctor-lenses": "^5.0.0",
+    "purescript-generics-rep": "^6.1.0",
+    "purescript-foreign-generic": "/k/gits/purescript-foreign-generic#7.0.1",
+    "purescript-ordered-collections": "^1.4.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"

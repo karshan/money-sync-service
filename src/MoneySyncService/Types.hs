@@ -38,7 +38,7 @@ data AppConfig =
     } deriving (Eq, Show)
 
 defaultAppConfig :: AppConfig
-defaultAppConfig = AppConfig "db" "127.0.0.1" 10002 8002 (NotificationConfig "svc-acc-key.json" "karshan@karshan.me" "karshan.sharma@gmail.com")
+defaultAppConfig = AppConfig "db" "127.0.0.1" 3104 3201 (NotificationConfig "svc-acc-key.json" "karshan@karshan.me" "karshan.sharma@gmail.com")
 
 data InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
 
@@ -54,7 +54,7 @@ type AccountId = Text
 type TxnId = Text
 type Tag = Text -- TODO CI Text
 
-data AccountType = Debit | Credit deriving (Eq, Show)
+data AccountType = Debit | Credit deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''AccountType)
 
 data Txn =
@@ -66,7 +66,7 @@ data Txn =
       , _accountId :: AccountId
       , _meta      :: Map Text Text
       , _tags      :: Set Tag
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''Txn)
 
 -- TODO get rid of empty_ and construct types using { _field = value } ?
@@ -87,7 +87,7 @@ data Balance =
     Balance {
         _amount :: Int
       , _txnId  :: TxnId
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''Balance)
 
 emptyBalance :: Balance
@@ -118,7 +118,7 @@ data Account =
       -- We need a way to link scraped data from an instution to
       -- an account, this is it
       , __3pLink       :: Text
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''Account)
 
 emptyAccount :: Account
@@ -188,7 +188,7 @@ data InstitutionResponse =
     InstitutionResponse {
         _id   :: InstitutionId
       , _name :: Text
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''InstitutionResponse)
 
 emptyInstitutionResponse :: InstitutionResponse
@@ -199,7 +199,7 @@ data GetDBResponse =
         _institutions :: Map InstitutionId InstitutionResponse
       , _accounts     :: Map AccountId Account
       , _txns         :: Map TxnId Txn
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 $(deriveJSON defaultOptions ''GetDBResponse)
 
 emptyGetDBResponse :: GetDBResponse

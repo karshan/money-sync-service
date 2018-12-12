@@ -1,4 +1,5 @@
 .stack-work/
 money-sync-service-exe
+bridge-exe
 db/
 svc-acc-key.json
