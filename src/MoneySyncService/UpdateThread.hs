@@ -49,6 +49,7 @@ updateThread ws c@NotificationConfig{..} = do
     -- Get institutions from DB, and pass creds to scrape
     is <- Map.elems <$> getInstDB
     acid <- ask
+    putText "scraping"
     mapM_
         (\i -> do
             case i ^. L.creds of
@@ -58,6 +59,7 @@ updateThread ws c@NotificationConfig{..} = do
                             (\e -> do
                                 addErrorLog e
                                 putStrLn "bofa scraper error"
+                                liftIO $ writeFile ("bofa-" <> toS (bofaReq ^. L.username) <> ".json") (toS resp)
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service bofa-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
@@ -71,6 +73,7 @@ updateThread ws c@NotificationConfig{..} = do
                             (\e -> do
                                 addErrorLog e
                                 putStrLn "chase scraper error"
+                                liftIO $ writeFile ("chase-" <> toS (chaseReq ^. L.username) <> ".json") (toS resp)
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service chase-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
