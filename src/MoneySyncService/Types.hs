@@ -20,6 +20,7 @@ import           GHC.Generics                  (Generic)
 import           MoneySyncService.Scrapers.API
 import           Network.Wai.Handler.Warp      (HostPreference)
 import           Protolude
+import Text.Regex.Posix
 
 data NotificationConfig =
     NotificationConfig {
@@ -171,6 +172,14 @@ data CreateInstitution =
     } deriving (Eq)
 $(deriveJSON defaultOptions ''CreateInstitution)
 
+data UpdateInstitution =
+    UpdateInstitution {
+        _id    :: InstitutionId
+      , _creds :: Creds
+    } deriving (Eq)
+$(deriveJSON defaultOptions ''UpdateInstitution)
+
+
 data TagOp =
     AddTags (Set Tag)
   | RemoveTags (Set Tag)
@@ -204,3 +213,21 @@ $(deriveJSON defaultOptions ''GetDBResponse)
 
 emptyGetDBResponse :: GetDBResponse
 emptyGetDBResponse = GetDBResponse Map.empty Map.empty Map.empty
+
+data TagRuleId = TagRuleId Text deriving (Eq, Ord, Show, Generic)
+
+instance ToJSONKey TagRuleId
+instance FromJSONKey TagRuleId
+
+$(deriveJSON defaultOptions ''TagRuleId)
+
+instance (StringConv TagRuleId Text) where
+    strConv _ (TagRuleId t) = t
+
+data TagRule =
+    TagRule {
+        _regex    :: Text
+      , _tag      :: Tag
+      , _priority :: Int
+    } deriving (Eq, Show, Generic)
+$(deriveJSON defaultOptions ''TagRule)

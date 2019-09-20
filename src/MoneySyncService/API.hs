@@ -13,7 +13,11 @@ import           Prelude (String)
 
 type API = "db" :> "get" :> Get '[JSON] GetDBResponse
       :<|> "institution" :> "create" :> ReqBody '[JSON] CreateInstitution :> Post '[JSON] ()
+      :<|> "institution" :> "update" :> ReqBody '[JSON] UpdateInstitution :> Post '[JSON] ()
       :<|> "tags" :> "update" :> ReqBody '[JSON] UpdateTags :> Post '[JSON] ()
+      :<|> "tagrule" :> "add" :> ReqBody '[JSON] TagRule :> Post '[JSON] ()
+      :<|> "tagrule" :> "delete" :> ReqBody '[JSON] TagRuleId :> Post '[JSON] ()
+      :<|> "tagrule" :> "get" :> Get '[JSON] (Map TagRuleId TagRule)
       :<|> "errorlog" :> "get" :> Get '[JSON] [Text]
       :<|> "errorlog" :> "clear" :> Post '[JSON] ()
 
@@ -29,7 +33,7 @@ server :: DBHandle -> Server API
 server acid = enter (runReaderTNat acid :: DBHandler :~> Handler) readerServerT
 
 readerServerT :: ServerT API DBHandler
-readerServerT = getDB :<|> addInst :<|> updateTags :<|> getErrorLog :<|> clearErrorLog
+readerServerT = getDB :<|> addInst :<|> updateInst :<|> updateTags :<|> addTagRule :<|> removeTagRule :<|> getTagRuleDB :<|> getErrorLog :<|> clearErrorLog
 
 app :: DBHandle -> Application
 app acid = serve api $

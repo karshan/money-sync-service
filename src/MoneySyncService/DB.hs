@@ -34,13 +34,14 @@ data Database =
       , _instDB     :: Map InstitutionId Institution
       , _accountDB  :: Map AccountId Account
       , _fcstTxnDB  :: Map TxnId FcstTxn
+      , _tagRuleDB  :: Map TagRuleId TagRule
       , _errorLogDB :: [Text]
       , _rndSeed    :: StdGen
     }
 makeLenses ''Database
 
 emptyDB :: Database
-emptyDB = Database Map.empty Map.empty Map.empty Map.empty [] (mkStdGen 0)
+emptyDB = Database Map.empty Map.empty Map.empty Map.empty Map.empty [] (mkStdGen 0)
 
 getDBEvt :: Query Database GetDBResponse
 getDBEvt =
@@ -63,6 +64,9 @@ getFcstTxnDBEvt = view fcstTxnDB <$> ask
 
 getInstDBEvt :: Query Database (Map InstitutionId Institution)
 getInstDBEvt = view instDB <$> ask
+
+getTagRuleDBEvt :: Query Database (Map TagRuleId TagRule)
+getTagRuleDBEvt = view tagRuleDB <$> ask
 
 getErrorLogEvt :: Query Database [Text]
 getErrorLogEvt = view errorLogDB <$> ask
@@ -217,9 +221,9 @@ removeInstEvt instId = do
     modify (over instDB (Map.delete instId))
 
 -- for now only institution creds can be updated
-updateInstEvt :: InstitutionId -> Creds -> Update Database ()
-updateInstEvt instId newCreds =
-    modify (over instDB (Map.adjust (L.creds .~ newCreds) instId))
+updateInstEvt :: UpdateInstitution -> Update Database ()
+updateInstEvt updateReq =
+    modify (over instDB (Map.adjust (L.creds .~ (updateReq ^. L.creds)) (updateReq ^. L.id)))
 
 evalTagOp :: TagOp -> Set Tag -> Set Tag
 evalTagOp (AddTags newTags) origTags = Set.union newTags origTags
@@ -234,6 +238,15 @@ updateTagsEvt req =
                     L.tags .~ evalTagOp (req ^. L.op) (txn ^. L.tags)
             else
                 txn)))
+
+addTagRuleEvt :: TagRule -> Update Database ()
+addTagRuleEvt a = do
+    existingIds <- Map.keysSet . Map.mapKeys toS . view tagRuleDB <$> get
+    newId <- TagRuleId <$> generateId existingIds
+    modify (over tagRuleDB (Map.insert newId a))
+
+removeTagRuleEvt :: TagRuleId -> Update Database ()
+removeTagRuleEvt tagRuleId = modify (over tagRuleDB (Map.delete tagRuleId))
 
 addErrorLogEvt :: Text -> Update Database ()
 addErrorLogEvt newLog = modify (over errorLogDB (newLog:))
@@ -253,10 +266,13 @@ $(deriveSafeCopy 0 'base ''Account)
 $(deriveSafeCopy 0 'base ''TxnRaw)
 $(deriveSafeCopy 0 'base ''MergeAccount)
 $(deriveSafeCopy 0 'base ''FcstTxn)
-$(deriveSafeCopy 0 'base ''Database)
+$(deriveSafeCopy 0 'base ''TagRuleId)
+$(deriveSafeCopy 0 'base ''TagRule)
+$(deriveSafeCopy 1 'base ''Database)
 $(deriveSafeCopy 0 'base ''InstitutionResponse)
 $(deriveSafeCopy 0 'base ''GetDBResponse)
 $(deriveSafeCopy 0 'base ''CreateInstitution)
+$(deriveSafeCopy 0 'base ''UpdateInstitution)
 $(deriveSafeCopy 0 'base ''TagOp)
 $(deriveSafeCopy 0 'base ''UpdateTags)
 $(deriveSafeCopy 0 'base ''StdGen)
@@ -265,10 +281,13 @@ $(makeAcidic ''Database [ 'getTxnDBEvt
                         , 'getFcstTxnDBEvt
                         , 'getInstDBEvt
                         , 'getDBEvt
+                        , 'getTagRuleDBEvt
                         , 'getErrorLogEvt
                         , 'mergeEvt
                         , 'addInstEvt
                         , 'removeInstEvt
+                        , 'addTagRuleEvt
+                        , 'removeTagRuleEvt
                         , 'updateInstEvt
                         , 'updateTagsEvt
                         , 'addErrorLogEvt
@@ -295,6 +314,9 @@ getInstDB = (`query'` GetInstDBEvt) =<< ask
 
 getDB :: (MonadReader DBHandle m, MonadIO m) => m GetDBResponse
 getDB = (`query'` GetDBEvt) =<< ask
+
+getTagRuleDB :: (MonadReader DBHandle m, MonadIO m) => m (Map TagRuleId TagRule)
+getTagRuleDB = (`query'` GetTagRuleDBEvt) =<< ask
 
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
@@ -323,8 +345,14 @@ addInst institution = (`update'` AddInstEvt institution) =<< ask
 removeInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> m ()
 removeInst instId = (`update'` RemoveInstEvt instId) =<< ask
 
-updateInst :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> Creds -> m ()
-updateInst instId creds = (`update'` UpdateInstEvt instId creds) =<< ask
+addTagRule :: (MonadReader DBHandle m, MonadIO m) => TagRule -> m ()
+addTagRule tagRule = (`update'` AddTagRuleEvt tagRule) =<< ask
+
+removeTagRule :: (MonadReader DBHandle m, MonadIO m) => TagRuleId -> m ()
+removeTagRule tagRuleId = (`update'` RemoveTagRuleEvt tagRuleId) =<< ask
+
+updateInst :: (MonadReader DBHandle m, MonadIO m) => UpdateInstitution -> m ()
+updateInst updateReq = (`update'` UpdateInstEvt updateReq) =<< ask
 
 updateTags :: (MonadReader DBHandle m, MonadIO m) => UpdateTags -> m ()
 updateTags req = (`update'` UpdateTagsEvt req) =<< ask

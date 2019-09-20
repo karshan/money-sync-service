@@ -44,6 +44,7 @@ library
                      , protolude
                      , pretty-show
                      , random
+                     , regex-posix
                      , safecopy
                      , servant
                      , servant-client

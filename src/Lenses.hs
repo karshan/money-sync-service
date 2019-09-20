@@ -18,6 +18,7 @@ makeFieldsNoPrefix ''Institution
 makeFieldsNoPrefix ''TxnRaw
 makeFieldsNoPrefix ''MergeAccount
 makeFieldsNoPrefix ''CreateInstitution
+makeFieldsNoPrefix ''UpdateInstitution
 makeFieldsNoPrefix ''UpdateTags
 makeFieldsNoPrefix ''InstitutionResponse
 makeFieldsNoPrefix ''GetDBResponse
