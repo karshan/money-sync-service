@@ -20,6 +20,7 @@ library
                      , MoneySyncService.Scrapers.API
                      , MoneySyncService.Scrapers.Bofa
                      , MoneySyncService.Scrapers.Chase
+                     , MoneySyncService.Scrapers.WF
                      , Util
                      , Lenses
                      , Webhook
@@ -35,6 +36,8 @@ library
                      , ctrie
                      , either
                      , gsuite-admin-sendmail
+                     , gogol
+                     , gogol-sheets
                      , http-client
                      , http-client-tls
                      , http-types
@@ -64,12 +67,20 @@ executable money-sync-service-exe
                      , money-sync-service
   default-language:    Haskell2010
 
-executable bridge-exe
-  hs-source-dirs:      bridge
+executable test-scrape-exe
+  hs-source-dirs:      test-scrape
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wunused-imports -Wname-shadowing -Wincomplete-patterns -Wunused-binds
   build-depends:       base
                      , money-sync-service
-                     , purescript-bridge
-                     , time
   default-language:    Haskell2010
+
+--executable bridge-exe
+--  hs-source-dirs:      bridge
+--  main-is:             Main.hs
+--  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wunused-imports -Wname-shadowing -Wincomplete-patterns -Wunused-binds
+--  build-depends:       base
+--                     , money-sync-service
+--                     , purescript-bridge
+--                     , time
+--  default-language:    Haskell2010

@@ -3,7 +3,6 @@
 {-# LANGUAGE DuplicateRecordFields  #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NoImplicitPrelude      #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
@@ -14,8 +13,8 @@ module MoneySyncService.Scrapers.API where
 import           Data.Aeson              (Value)
 import           Data.Aeson.TH           (Options (..), defaultOptions,
                                           deriveJSON)
-import           Data.Csv                (DefaultOrdered (..),
-                                          FromNamedRecord (..), header, (.:))
+import           Data.Csv                (DefaultOrdered (..), FromRecord (..),
+                                          FromNamedRecord (..), header, (.:), (.!))
 import           Data.Proxy              (Proxy (..))
 import           Network.HTTP.Client     (managerResponseTimeout, newManager,
                                           responseTimeoutMicro)
@@ -23,7 +22,7 @@ import           Network.HTTP.Client.TLS (tlsManagerSettings)
 import           Protolude
 import           Servant.API             ((:<|>) (..), (:>), JSON, Post,
                                           ReqBody)
-import           Servant.Client          (BaseUrl (..), ClientEnv (..), ClientM,
+import           Servant.Client          (BaseUrl (..), mkClientEnv, ClientM,
                                           Scheme (Http), ServantError, client,
                                           runClientM)
 
@@ -142,7 +141,7 @@ data ChaseTileDetail =
     ChaseTileDetail {
         _availableBalance :: Double
       , _currentBalance   :: Double
-      , _lastPaymentDate  :: Text
+      , _lastPaymentDate  :: Maybe Text
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseTileDetail)
 
@@ -165,16 +164,62 @@ data ChaseResponse =
     } deriving (Eq, Show)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''ChaseResponse)
 
+data WFCsv =
+    WFCsv {
+        _date        :: !Text
+      , _amount      :: !Text
+      , _description :: !Text
+    } deriving (Eq, Show)
+instance FromRecord WFCsv where
+    parseRecord v
+        | length v == 5 = WFCsv <$> v .! 0 <*> v .! 1 <*> v .! 4
+        | otherwise = mzero
+
+
+data WFDownloadedData =
+    WFDownloadedData {
+        _balance   :: Double
+      , __type     :: Text
+      , _csv       :: Maybe Text
+      , _name      :: Text
+      , _number    :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''WFDownloadedData)
+
+data WFResponse =
+    WFResponse {
+        _downloadedData :: Maybe [WFDownloadedData]
+      , _log            :: Value
+      , _ok             :: Bool
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''WFResponse)
+
+data WFCreds =
+    WFCreds {
+        _username :: Text
+      , _password :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''WFCreds)
+
+data WFRequest =
+    WFRequest {
+        _creds      :: WFCreds
+      , _webhookURL :: Text
+    } deriving (Eq, Show)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''WFRequest)
+
 type API = "bofa"  :> ReqBody '[JSON] BofaRequest :> Post '[JSON] ()
       :<|> "chase" :> ReqBody '[JSON] ChaseRequest :> Post '[JSON] ()
+      :<|> "wf"    :> ReqBody '[JSON] WFRequest :> Post '[JSON] ()
 
 scrapeBofa  :: BofaRequest -> ClientM ()
 scrapeChase :: ChaseRequest -> ClientM ()
-scrapeBofa :<|> scrapeChase = client (Proxy :: Proxy API)
+scrapeWF    :: WFRequest -> ClientM ()
+scrapeBofa :<|> scrapeChase :<|> scrapeWF = client (Proxy :: Proxy API)
 
 run :: MonadIO m => ClientM resp -> m (Either ServantError resp)
 run rpc = liftIO $ do
     mgr <- newManager (tlsManagerSettings { managerResponseTimeout = responseTimeoutMicro (120 * 10^6) })
     runClientM rpc
-        (ClientEnv mgr
+        (mkClientEnv mgr
             (BaseUrl Http "localhost" 3200 ""))

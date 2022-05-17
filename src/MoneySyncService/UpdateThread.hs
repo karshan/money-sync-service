@@ -7,9 +7,10 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 module MoneySyncService.UpdateThread
-    (updateThread) where
+    (update, updateThread) where
 
 import           Control.Lens
+import           Data.Acid                       (createCheckpoint)
 import qualified Data.Map                        as Map
 import           Data.Time.Clock                 (getCurrentTime)
 import           Data.Time.LocalTime             (getCurrentTimeZone,
@@ -19,6 +20,7 @@ import qualified Lenses                          as L
 import           MoneySyncService.DB
 import qualified MoneySyncService.Scrapers.Bofa  as Bofa
 import qualified MoneySyncService.Scrapers.Chase as Chase
+import qualified MoneySyncService.Scrapers.WF    as WF
 import           MoneySyncService.Types
 import           Protolude
 import           Text.Show.Pretty                (ppShow)
@@ -44,8 +46,8 @@ logMergeResults NotificationConfig{..} tag mergeResults = do
         print mergeResults
 
 -- TODO MonadReader AppContext
-updateThread :: (MonadReader DBHandle m, MonadIO m) => WebhookServer -> NotificationConfig -> m ()
-updateThread ws c@NotificationConfig{..} = do
+update :: (MonadReader DBHandle m, MonadIO m) => WebhookServer -> NotificationConfig -> m ()
+update ws c@NotificationConfig{..} = do
     -- Get institutions from DB, and pass creds to scrape
     is <- Map.elems <$> getInstDB
     acid <- ask
@@ -63,8 +65,8 @@ updateThread ws c@NotificationConfig{..} = do
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service bofa-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
-                            (\result -> logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") =<<
-                                            merge (i ^. L.id) result)
+                            (logMergeResults c ("Bofa[" <> show (i ^. L.id) <> "]") <=<
+                                            merge (i ^. L.id))
                             (Bofa.parse resp))
                     Bofa.scrape bofaReq wUrl
                 ChaseCredsT chaseReq -> do
@@ -77,10 +79,30 @@ updateThread ws c@NotificationConfig{..} = do
                                 sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
                                     "money-sync-service chase-scraper error" e
                                 either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
-                            (\result -> logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") =<<
-                                            merge (i ^. L.id) result)
+                            (logMergeResults c ("Chase[" <> show (i ^. L.id) <> "]") <=<
+                                            merge (i ^. L.id))
                             (Chase.parse resp))
-                    Chase.scrape chaseReq wUrl)
+                    Chase.scrape chaseReq wUrl
+                WFCredsT wfReq -> do
+                    wUrl <- liftIO $ webhook ws (\resp -> flip runReaderT acid $ do
+                        either
+                            (\e -> do
+                                addErrorLog e
+                                putStrLn "wf scraper error"
+                                liftIO $ writeFile ("wf-" <> toS (wfReq ^. L.username) <> ".json") (toS resp)
+                                sendResult <- liftIO $ sendMail' gsuiteKeyFile svcAccUser toEmail
+                                    "money-sync-service wf-scraper error" e
+                                either (\(ex :: SomeException) -> liftIO $ putStrLn $ displayException ex) (const $ return ()) sendResult)
+                            (logMergeResults c ("WF[" <> show (i ^. L.id) <> "]") <=<
+                                            merge (i ^. L.id))
+                            (WF.parse resp))
+                    WF.scrape wfReq wUrl)
+
         is
-    minuteDelay (4 * 60)
+    liftIO $ createCheckpoint acid
+
+updateThread :: (MonadReader DBHandle m, MonadIO m) => WebhookServer -> NotificationConfig -> m ()
+updateThread ws c@NotificationConfig{..} = do
+    update ws c
+    minuteDelay (24 * 60)
     updateThread ws c

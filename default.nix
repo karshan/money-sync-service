@@ -3,7 +3,7 @@
 , http-client, http-client-tls, lens, memory
 , natural-transformation, protolude, random, safecopy, servant
 , servant-client, servant-server, stdenv, text, time, vector, wai
-, warp, pretty-show, ctrie, purescript-bridge
+, warp, pretty-show, ctrie, purescript-bridge, regex-posix, gogol-sheets
 }:
 mkDerivation {
   pname = "money-sync-service";
@@ -16,7 +16,7 @@ mkDerivation {
     either gsuite-admin-sendmail http-client http-client-tls lens
     memory natural-transformation protolude random safecopy servant
     servant-client servant-server text time vector wai warp pretty-show
-    ctrie purescript-bridge
+    ctrie purescript-bridge regex-posix gogol-sheets
   ];
   executableHaskellDepends = [ base ];
   license = stdenv.lib.licenses.bsd3;

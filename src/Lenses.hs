@@ -35,3 +35,7 @@ makeFieldsNoPrefix ''BofaDebitCsv
 makeFieldsNoPrefix ''BofaDebitBalanceCsv
 makeFieldsNoPrefix ''BofaCreditCsv
 makeFieldsNoPrefix ''BofaResponse
+makeFieldsNoPrefix ''WFCreds
+makeFieldsNoPrefix ''WFResponse
+makeFieldsNoPrefix ''WFDownloadedData
+makeFieldsNoPrefix ''WFCsv

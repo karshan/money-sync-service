@@ -1,19 +1,27 @@
-resolver: lts-10.3
+resolver: lts-13.30
 packages:
 - .
-- location: https://github.com/karshan/protolude/archive/5c83a823a4c4e176cd6524f44edef454da1718dd.zip
-  extra-dep: true
-- location: https://github.com/brendanhay/gogol/archive/896ef3472ce09116f13d0cda3b8134b28e833a19.zip
-  extra-dep: true
-  subdirs:
-    - gogol
-    - gogol-gmail
-- location: https://github.com/karshan/gsuite-admin-sendmail/archive/7d1546ce3e5f81cb9ccf11ba79b53c82fb97c764.zip
-  extra-dep: true
-- location: /k/gits/purescript-bridge # https://github.com/albertov/purescript-bridge/archive/65d44fea493a910baaad568c2f4fc756e957168e.zip
-  extra-dep: true
 extra-deps:
 - acid-state-0.14.3
+- github: Avi-D-coder/implicit-hie
+  commit: a95608f9a52e4fbd73c6d7cf7304eccb728030ff
+  #- github: karshan/protolude
+  #commit: 5c83a823a4c4e176cd6524f44edef454da1718dd
+- github: karshan/gsuite-admin-sendmail
+  commit: 7d1546ce3e5f81cb9ccf11ba79b53c82fb97c764
+- gogol-0.5.0@sha256:01b38acf97ae0afb2465935fee1bebce03c1b84e629cf0887467be7ae361f0a7,3222
+- gogol-gmail-0.5.0@sha256:cb130c24f7c5d4897d4a601dd43fc782e59554ab4ef217c08477a63a6943cec3,5871
+- gogol-sheets-0.5.0@sha256:a1235526682b8f2ecb1fd97f918fd0f8c11ef97a81cfd631529d622de308f7ce,2594
+- gogol-core-0.5.0@sha256:c0a919cd89a33de7fd6ee925abdb48b0eb5d1002a016124acbdff568f267e4c7,2821
+  #- github: albertov/purescript-bridge
+  #commit: 65d44fea493a910baaad568c2f4fc756e957168e
+  #- github: brendanhay/gogol
+  #commit: 896ef3472ce09116f13d0cda3b8134b28e833a19
+  #subdirs:
+  #  - gogol
+  #  - core
+  #  - gogol-gmail
+  #  - gogol-sheets
 flags: {}
 local-bin-path: .
 extra-package-dbs: []

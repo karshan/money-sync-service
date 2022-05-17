@@ -29,7 +29,7 @@ goTxns =
             out <- eOut
             -- Ignore pending transactions for now, these could be
             -- problematic if there amounts change for example
-            if ct ^. L.pending == False then do
+            if not $ ct ^. L.pending then do
                 dt <- parseDate (ct ^. L.transactionDate)
                 return $ (emptyTxnRaw &
                     L.name .~ ct ^. L.description &
@@ -52,13 +52,13 @@ goAccs =
                     (\res -> do
                         txnRaws <- goTxns res
                         Right $ (emptyMergeAccount &
-                            L.balance .~ dblUsd (accTile ^. L.tileDetail ^. L.currentBalance) &
+                            L.balance .~ dblUsd (accTile ^. (L.tileDetail . L.currentBalance)) &
                             L._type .~ Credit &
                             L.number .~ accTile ^. L.mask &
                             L.name .~ accTile ^. L.cardType &
                             L._3pLink .~ show (accTile ^. L.accountId) &
                             L.txns .~ txnRaws):out)
-                    (accTile ^. L.transactions ^. L.result))
+                    (accTile ^. (L.transactions . L.result)))
         (Right [])
 
 parse :: ByteString -> Either Text [MergeAccount]

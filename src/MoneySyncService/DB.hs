@@ -150,23 +150,27 @@ putAccount instId mergeAcc = do
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
     let sortDesc a b = (flip compare `on` (view L.date)) a b <> (flip compare `on` (view L.id)) a b
     -- FIXME: there could be an account with 0 txns, fail gracefully
-    latestTxnId <- fromMaybe (error "Account with 0 txns") . map (view L.id) . head . sortBy sortDesc . toList .
+    mLatestTxnId <- map (view L.id) . head . sortBy sortDesc . toList .
             Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
-    let mExistingCurBal = view L.balance <$> mExistingAcc
-    let (newCurBal, newOldBals) =
-            -- If the database contains newer txns than the txns in this merge
-            -- don't update the current balance (the balance is old).
-            if latestTxnId `Set.member` newTxnIds then
-                (emptyBalance &
-                    L.amount .~ mergeAcc ^. L.balance &
-                    L.txnId .~ latestTxnId
-                  , maybe existingOldBals (:existingOldBals) mExistingCurBal)
-            else
-                -- In theory we should add mergeAcc.balance to existingOldBals here
-                -- FIXME: there could be an account with 0 txns, fail gracefully
-                (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
-    modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
-    return (accId, newTxns)
+    if mLatestTxnId == Nothing then
+        return (accId, [])
+    else do
+        let latestTxnId = fromMaybe (error "impossible") mLatestTxnId
+        let mExistingCurBal = view L.balance <$> mExistingAcc
+        let (newCurBal, newOldBals) =
+                -- If the database contains newer txns than the txns in this merge
+                -- don't update the current balance (the balance is old).
+                if latestTxnId `Set.member` newTxnIds then
+                    (emptyBalance &
+                        L.amount .~ mergeAcc ^. L.balance &
+                        L.txnId .~ latestTxnId
+                      , maybe existingOldBals (:existingOldBals) mExistingCurBal)
+                else
+                    -- In theory we should add mergeAcc.balance to existingOldBals here
+                    -- FIXME: there could be an account with 0 txns, fail gracefully
+                    (fromMaybe (error "Account with 0 txns") mExistingCurBal, existingOldBals)
+        modify (over accountDB (Map.insert accId (mkAccount instId accId newCurBal newOldBals mergeAcc)))
+        return (accId, newTxns)
 
 mkAccount :: InstitutionId -> AccountId -> Balance -> [Balance] -> MergeAccount -> Account
 mkAccount instId accId curBal oldBals mAcc =
@@ -259,6 +263,7 @@ $(deriveSafeCopy 0 'base ''Balance)
 $(deriveSafeCopy 0 'base ''AccountType)
 $(deriveSafeCopy 0 'base ''ChaseCreds)
 $(deriveSafeCopy 0 'base ''BofaCreds)
+$(deriveSafeCopy 0 'base ''WFCreds)
 $(deriveSafeCopy 0 'base ''Creds)
 $(deriveSafeCopy 0 'base ''InstitutionId)
 $(deriveSafeCopy 0 'base ''Institution)

@@ -18,7 +18,7 @@ import qualified Data.ByteString.Base64.URL as B64
 import System.Random
 
 data WebhookServer =
-    WebhookServer { 
+    WebhookServer {
         wsMap  :: Map [Text] (ByteString -> IO ())
       , wsHost :: HostPreference
       , wsPort :: Port

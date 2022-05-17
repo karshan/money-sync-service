@@ -9,20 +9,12 @@ import           Control.Lens
 import qualified Data.Aeson                    as Aeson
 import           Data.Csv                      (FromNamedRecord, decodeByName)
 import qualified Data.Text                     as T
-import           Data.Time                     (Day, UTCTime (..))
-import           Data.Time.Format              (defaultTimeLocale, parseTimeM)
 import qualified Lenses                        as L
 import           MoneySyncService.Scrapers.API
 import           MoneySyncService.Types
 import           Prelude                       ((!!))
 import           Protolude
-import           Util                          (dblUsd)
-
-parseDate :: Text -> Either Text Day
-parseDate dateS =
-    maybeToEither ("parseDate \"" <> dateS <> "\" failed") $
-        fmap utctDay $
-        parseTimeM True defaultTimeLocale "%m/%d/%Y" $ toS dateS
+import           Util                          (dblUsd, parseBalance, parseDate)
 
 parseDebitTxn :: BofaDebitCsv -> Either Text TxnRaw
 parseDebitTxn t = do
@@ -42,7 +34,7 @@ parseCreditTxn t = do
     return (emptyTxnRaw &
         L.name .~ t ^. L.payee &
         L.date .~ dt &
-        L.amount .~ (negate $ dblUsd amt))
+        L.amount .~ negate (dblUsd amt))
 
 swapEither :: Either a b -> Either b a
 swapEither (Left a)  = Right a
@@ -74,10 +66,6 @@ goTxns txnParser csvText = do
             return $ parsedT:out)
         (Right [])
         ts
-
-parseBalance :: Text -> Either Text Int
-parseBalance b = maybeToEither ("Failed to parse balance " <> b) . fmap dblUsd . readMaybe .
-    toS . T.filter (\c -> c /= '$' && c /= ',') $ b
 
 drop2nd :: [a] -> [a]
 drop2nd []       = []

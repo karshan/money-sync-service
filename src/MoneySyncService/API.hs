@@ -1,7 +1,7 @@
 {-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TemplateHaskellQuotes   #-}
 {-# LANGUAGE TypeOperators     #-}
 module MoneySyncService.API where
 
@@ -30,7 +30,7 @@ api :: Proxy StaticAPI
 api = Proxy
 
 server :: DBHandle -> Server API
-server acid = enter (runReaderTNat acid :: DBHandler :~> Handler) readerServerT
+server acid = hoistServer (Proxy :: Proxy API) (`runReaderT` acid) readerServerT
 
 readerServerT :: ServerT API DBHandler
 readerServerT = getDB :<|> addInst :<|> updateInst :<|> updateTags :<|> addTagRule :<|> removeTagRule :<|> getTagRuleDB :<|> getErrorLog :<|> clearErrorLog

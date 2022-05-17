@@ -3,7 +3,6 @@
 {-# LANGUAGE DuplicateRecordFields  #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NoImplicitPrelude      #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
@@ -20,7 +19,6 @@ import           GHC.Generics                  (Generic)
 import           MoneySyncService.Scrapers.API
 import           Network.Wai.Handler.Warp      (HostPreference)
 import           Protolude
-import Text.Regex.Posix
 
 data NotificationConfig =
     NotificationConfig {
@@ -41,7 +39,7 @@ data AppConfig =
 defaultAppConfig :: AppConfig
 defaultAppConfig = AppConfig "db" "127.0.0.1" 3104 3201 (NotificationConfig "svc-acc-key.json" "karshan@karshan.me" "karshan.sharma@gmail.com")
 
-data InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
+newtype InstitutionId = InstitutionId Text deriving (Eq, Ord, Show, Generic)
 
 instance ToJSONKey InstitutionId
 instance FromJSONKey InstitutionId
@@ -101,6 +99,7 @@ type SecretAnswers = [(Text, Text)]
 data Creds =
     BofaCredsT BofaCreds
   | ChaseCredsT ChaseCreds
+  | WFCredsT WFCreds
         deriving (Eq)
 $(deriveJSON defaultOptions ''Creds)
 
@@ -214,7 +213,7 @@ $(deriveJSON defaultOptions ''GetDBResponse)
 emptyGetDBResponse :: GetDBResponse
 emptyGetDBResponse = GetDBResponse Map.empty Map.empty Map.empty
 
-data TagRuleId = TagRuleId Text deriving (Eq, Ord, Show, Generic)
+newtype TagRuleId = TagRuleId Text deriving (Eq, Ord, Show, Generic)
 
 instance ToJSONKey TagRuleId
 instance FromJSONKey TagRuleId
