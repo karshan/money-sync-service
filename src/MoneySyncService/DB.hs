@@ -148,7 +148,7 @@ putAccount instId mergeAcc = do
     let existingOldBals = fromMaybe [] (view L.oldBalances <$> mExistingAcc)
     let newTxns = removeDupeTxns accId curTxns (toList $ mergeAcc ^. L.txns)
     newTxnIds <- Set.fromList . toList <$> mapM (putTxn accId) newTxns
-    let sortDesc a b = (flip compare `on` (view L.date)) a b <> (flip compare `on` (view L.id)) a b
+    let sortDesc a b = (flip compare `on` view L.date) a b <> (flip compare `on` view L.id) a b
     -- FIXME: there could be an account with 0 txns, fail gracefully
     mLatestTxnId <- map (view L.id) . head . sortBy sortDesc . toList .
             Map.filter ((== accId) . view L.accountId) . view txnDB <$> get
@@ -197,23 +197,21 @@ mkTxn accId tId txn =
 
 -- Returns number of merged txns
 mergeEvt :: InstitutionId -> [MergeAccount] -> Update Database [(AccountId, [TxnRaw])]
-mergeEvt gInstId mergeAccs =
-    mapM (putAccount gInstId) mergeAccs
+mergeEvt gInstId =
+    mapM (putAccount gInstId)
 
 addInstEvt :: CreateInstitution -> Update Database ()
 addInstEvt a = do
     existingIds <- Map.keysSet . Map.mapKeys toS . view instDB <$> get
     newId <- InstitutionId <$> generateId existingIds
     modify
-        (over instDB
-            (\cur ->
+        (over instDB $
                 Map.insert
                     newId
                     (emptyInstitution &
                         L.id .~ newId &
                         L.name .~ a ^. L.name &
-                        L.creds .~ a ^. L.creds)
-                    cur))
+                        L.creds .~ a ^. L.creds))
 
 -- delete all txns and accounts in the DB associated with the given institution
 removeInstEvt :: InstitutionId -> Update Database ()
@@ -326,23 +324,8 @@ getTagRuleDB = (`query'` GetTagRuleDBEvt) =<< ask
 getErrorLog :: (MonadReader DBHandle m, MonadIO m) => m [Text]
 getErrorLog = (`query'` GetErrorLogEvt) =<< ask
 
-preRemoveDupes :: GetDBResponse -> InstitutionId -> MergeAccount -> MergeAccount
-preRemoveDupes dbResp instId m =
-    maybe
-        m -- If no existing account return as is to be created
-        (\existingAcc ->
-            m & L.txns .~ (removeDupeTxns (existingAcc ^. L.id) (dbResp ^. L.txns) (toList $ m ^. L.txns)))
-        (matchingAccount instId (dbResp ^. L.accounts) m)
-
 merge :: (MonadReader DBHandle m, MonadIO m) => InstitutionId -> [MergeAccount] -> m [(AccountId, [TxnRaw])]
-merge instId mergeAccs = do
-    acid <- ask
-    db <- getDB
-    let newMerges = map (preRemoveDupes db instId) mergeAccs
-    if null newMerges then
-        return []
-    else
-        update' acid (MergeEvt instId newMerges)
+merge instId mergeAccs = (`update'` MergeEvt instId mergeAccs) =<< ask
 
 addInst :: (MonadReader DBHandle m, MonadIO m) => CreateInstitution -> m ()
 addInst institution = (`update'` AddInstEvt institution) =<< ask
